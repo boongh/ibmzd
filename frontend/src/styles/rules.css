@@ -1,0 +1,265 @@
+.secondary-page {
+  width: min(880px, calc(100% - 70px));
+  margin: 0 auto;
+  padding: 30px 0;
+  overflow-y: auto;
+}
+
+.page-back {
+  margin-bottom: 24px;
+}
+
+.back-link {
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+.page-heading-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.secondary-page h1 {
+  font-size: 26px;
+}
+
+.primary-button, .secondary-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: white;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.primary-button {
+  color: white;
+  background: var(--green);
+}
+
+.rule-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 28px 0 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rules-table {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+
+.rule-table-head, .rule-table-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.4fr) .75fr .8fr 1.25fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 13px;
+}
+
+.rule-table-head {
+  color: var(--muted);
+  background: var(--page);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.rule-table-row {
+  min-height: 54px;
+  border-top: 1px solid var(--line);
+  color: #59645b;
+  font-size: 11px;
+}
+
+.rule-title, .row-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.rule-title > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.rule-title strong {
+  font-size: 11px;
+}
+
+.rule-title small {
+  overflow: hidden;
+  color: var(--muted);
+  font: 10px monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-symbol, .type-pill, .action-pill {
+  padding: 4px 6px;
+  border-radius: 4px;
+  color: var(--green-dark);
+  background: var(--green-light);
+  font-size: 10px;
+}
+
+.row-actions {
+  justify-content: flex-end;
+}
+
+.row-actions button {
+  padding: 3px;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+}
+
+.row-actions .danger-text {
+  color: var(--danger);
+}
+
+.empty-panel {
+  margin-top: 10px;
+  padding: 35px 18px;
+  border: 1px dashed #d4ddd5;
+  border-radius: 6px;
+  text-align: center;
+  background: white;
+}
+
+.empty-symbol {
+  color: var(--green);
+  font-size: 22px;
+}
+
+.empty-panel h2 {
+  margin: 8px 0;
+  font-size: 16px;
+}
+
+.empty-panel p {
+  max-width: 340px;
+  margin: 0 auto 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rule-note {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px;
+  border-radius: 5px;
+  color: var(--green-dark);
+  background: var(--green-light);
+  font-size: 11px;
+}
+
+.rule-note p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.rule-form-card {
+  max-width: 660px;
+  margin-top: 22px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+
+.field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 15px;
+  color: #59645b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field-label input, .field-label textarea, .field-label select, .manual-controls input, .manual-controls select, .rule-test textarea {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: white;
+  font-size: 12px;
+}
+
+.field-label textarea, .rule-test textarea {
+  resize: vertical;
+  font-family: monospace;
+  line-height: 1.5;
+}
+
+.field-label small, .rule-test p {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.rule-test {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr auto;
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 5px;
+  background: var(--page);
+}
+
+.rule-test strong {
+  font-size: 12px;
+}
+
+.rule-test p {
+  margin: 4px 0 0;
+}
+
+.rule-test .secondary-button {
+  white-space: nowrap;
+}
+
+.rule-test .test-result {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--green-dark);
+}
+
+.rule-test .test-result.failed {
+  color: var(--danger);
+}
+
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}

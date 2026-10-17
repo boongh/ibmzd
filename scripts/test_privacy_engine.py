@@ -95,6 +95,16 @@ def main():
     assert failing.apply_rules("x", "s1") is None
     assert len(engine.get_records("s1").redactions) == before
 
+    # restoration: LLM-style reply with placeholders, any text, case/unknown/overlapping cases
+    assert engine.restore_text("Hi [PERSON_1], I mailed [EMAIL_1] and [email_2].", "s1") == \
+        "Hi Alice Example, I mailed alice@example.com and bob@example.com."
+    assert engine.restore_text("[EMAIL_1][EMAIL_1] [NOPE_9] plain", "s1") == \
+        "alice@example.com" * 2 + " [NOPE_9] plain"
+    assert engine.restore_text("[EMAIL_1] vs [PERSON_2]", "s2") == "bob@example.com vs [PERSON_2]"  # per session
+    roundtrip = engine.apply_rules("Bob Sample <bob@example.com>", "s1")
+    assert engine.restore_text(roundtrip, "s1") == "Bob Sample <bob@example.com>"
+    assert engine.restore_text("x", "nope") is None  # unknown session
+
     # eviction
     engine.forget_session("s1")
     assert engine.get_records("s1") is None

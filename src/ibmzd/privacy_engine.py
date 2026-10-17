@@ -1,202 +1,182 @@
-import sqlite3
-import time
+import logging
+from dataclasses import dataclass
+from typing import Callable
 
-def generate_id(length = 8):
-    import random
-    import string
-
-    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
-    
 import re2
-class Rule:
-    def __init__(self, id, name, type, config, priority):
-        self._id = id
-        self._type : str = type
-        self._name = name
-        self._config = config
-        self._priority = priority
-        self.store = {}
 
-    def _placeholder(self, match):
-        if match not in self.store:
-            self.store[match] = f"[REDACTED_{self.type.upper()}_{self.counter}]"
-        return self.store[match]
+from ibmzd.privacy_models import (
+    NerRuleConfig,
+    Redaction,
+    RedactionSpan,
+    RegexRuleConfig,
+    Ruleset,
+    SessionRecords,
+)
 
-    def strip(self, text, session, conn):
+logger = logging.getLogger(__name__)
+
+# (text, entity type names) -> [(start, end, label), ...] with offsets into `text`
+NerDetector = Callable[[str, list[str]], list[tuple[int, int, str]]]
+
+# TODO(DB): session id -> Ruleset (built from chat_sessions/rulesets/ruleset_rules/rules rows),
+# or None if the session is unknown. Supplied by the integrator.
+RulesetLoader = Callable[[str], Ruleset | None]
 
 
-        if self.type == "regex":
-            out = re2.finditer(self.config, text)
+@dataclass(frozen=True)
+class _Match:
+    start: int
+    end: int
+    label: str
+    rule_id: int
+    priority: int
 
-        if self.type == "BERT":
-            # Placeholder for BERT-based redaction logic
-            out = text  # No actual redaction implemented
-        return out
-
-    def restore(self, text):
-        return text
-
-    @classmethod
-    def default(cls, id = generate_id(8), name = "default", type = None, config = ""):
-        return cls(id, name, type, config)
-
-class Ruleset:
-    def __init__(self, id = generate_id(8), name = "default"):
-        self.id = id
-        self.name = name
-        self.rules: list[Rule] = []
-
-    def add_rule(self, rule: Rule):
-        self.rules.append(rule)
-
-    def remove_rule(self, rule_id: str):
-        self.rules = [rule for rule in self.rules if rule.id != rule_id]
-
-    def get_rules(self) -> list[Rule]:
-        return self.rules
-
-class Session:
-    def __init__(self, id, ruleset_id = None):
-        self._id = id
-        self._user_id = None
-        self._ruleset_id = ruleset_id
-        self._title = None
-        self._ruleset_cache: Ruleset = None
-    def get_ruleset(self, conn) -> Ruleset:
-        if self._ruleset_cache is not None:
-            return self._ruleset_cache
-
-        if self._ruleset_id is None:
-            return None
-
-        ruleset_data = conn.execute("SELECT * FROM rulesets WHERE id = ?", (self._ruleset_id,)).fetchone()
-        if not ruleset_data:
-            return None
-
-        ruleset = Ruleset(ruleset_data["id"], ruleset_data["name"])
-        rules_data = conn.execute("SELECT * FROM ruleset_rules WHERE ruleset_id = ?", (self._ruleset_id,)).fetchall()
-        for rule in rules_data:
-            rule_data = conn.execute("SELECT * FROM rules WHERE id = ?", (rule["rule_id"],)).fetchone()
-            if rule_data:
-                ruleset.add_rule(Rule(rule_data["id"], rule_data["name"], rule_data["type"], rule_data["config"], rule["priority"]))
-
-        self._ruleset_cache = ruleset
-        return ruleset
 
 class PrivacyEngine:
-    def __init__(self):
-        import sqlite3
-        self._sessions_id: dict[str, Session] = {}  # Maps session IDs to ruleset IDs
+    """In-memory only. Nothing is ever written to disk."""
 
-        # Connect to your existing SQLite database
-        self._conn = sqlite3.connect("database.db")
-        self._conn.row_factory = sqlite3.Row
+    def __init__(
+        self,
+        ruleset_loader: RulesetLoader | None = None,
+        ner_detector: NerDetector | None = None,
+    ):
+        self._ruleset_loader = ruleset_loader
+        self._ner_detector = ner_detector
+        self._rulesets: dict[str, Ruleset] = {}  # ruleset cache, per session
+        self._records: dict[str, SessionRecords] = {}  # held until the integrator persists/evicts them
 
-    def refetch_rules(self, session: str) -> list[Rule]:
-        if session not in self._ruleset:
-            return None  # or raise an exception
+    # ---- ruleset cache -------------------------------------------------------------
 
-        ##Refetch rules from the database and update the ruleset for the session
-        return self._ruleset[session]
+    def set_ruleset(self, session: str, ruleset: Ruleset) -> None:
+        """Manually put (or replace) the cached ruleset of a session."""
+        self._rulesets[session] = ruleset
 
-    # def create_session(self) -> str:
-    #     session_id = generate_id(16)
-    #     return session_id
+    def refresh_ruleset(self, session: str) -> bool:
+        """Drop the cached ruleset and reload it through the ruleset_loader.
 
-    # def add_rule(self, ruleset_id: str, rule_id: Rule) -> str:
-    
-    #     if ruleset_id not in self._ruleset:
-    #         return None  # or raise an exception
-    #     self._ruleset[ruleset_id].append(rule_id)
-    #     return rule_id.id
+        Returns False (and leaves the cache empty for that session) if there is no loader
+        or the loader returns nothing / fails.
+        """
+        self._rulesets.pop(session, None)
+        if self._ruleset_loader is None:
+            return False
+        try:
+            ruleset = self._ruleset_loader(session)
+        except Exception as e:
+            logger.error("ruleset refresh failed: %s: %s", type(e).__name__, e)
+            return False
+        if ruleset is None:
+            return False
+        self._rulesets[session] = ruleset
+        return True
 
-    # def remove_rule(self, ruleset_id: str, rule_id: str) -> bool:
-    #     success = False
-    #     try:
-    #         self._ruleset = [rule for rule in self._ruleset if rule.id != rule_id]
-    #         success = True
-    #     except Exception as e:
-    #         print(f"Error removing rule: {e}")
+    def invalidate_ruleset(self, session: str) -> None:
+        """Drop the cached ruleset of one session (reloaded lazily on the next apply_rules)."""
+        self._rulesets.pop(session, None)
 
-    #     return success
+    def clear_ruleset_cache(self) -> None:
+        self._rulesets.clear()
 
-    # Returns None if the session does not exist, otherwise returns the redacted text
-    def apply_rules(self, text: str, session: str) -> str:
-        
-        if session not in self._sessions_rulesets:
-            sesh = self._conn.execute("SELECT * FROM rules").fetchone()
-            if sesh:
-                self._sessions_rulesets[session] = sesh["ruleset_id"] 
+    def get_ruleset(self, session: str) -> Ruleset | None:
+        """Cached ruleset, loading it through the loader on a cache miss."""
+        if session not in self._rulesets:
+            self.refresh_ruleset(session)
+        return self._rulesets.get(session)
+
+    # ---- held records --------------------------------------------------------------
+
+    def get_records(self, session: str) -> SessionRecords | None:
+        """Redactions, spans and llm_content held for a session (the live object, treat as read-only)."""
+        return self._records.get(session)
+
+    def forget_session(self, session: str) -> None:
+        """Evict a session's records and cached ruleset from memory."""
+        self._records.pop(session, None)
+        self._rulesets.pop(session, None)
+
+    # TODO(DB): the integrator persists get_records(session) (redactions, spans, llm_content),
+    # mapping local Redaction.id values to the real DB ids, then calls forget_session when the
+    # session ends. Where raw `original` values may be stored is an open AGENTS.md decision.
+
+    # ---- redaction -----------------------------------------------------------------
+
+    def _find_matches(self, text: str, ruleset: Ruleset) -> list[_Match]:
+        found: list[_Match] = []
+        for entry in ruleset.entries:
+            if not entry.enabled:
+                continue
+            rule, config = entry.rule, entry.rule.config
+            if isinstance(config, RegexRuleConfig):
+                for m in re2.finditer(config.pattern, text):
+                    if m.end() > m.start():
+                        found.append(_Match(m.start(), m.end(), config.label, rule.id, entry.priority))
+            elif isinstance(config, NerRuleConfig):
+                if self._ner_detector is None:
+                    raise RuntimeError("ruleset has an NER rule but no NER detector is configured")
+                for start, end, label in self._ner_detector(text, config.entities):
+                    if end > start:
+                        found.append(_Match(start, end, label, rule.id, entry.priority))
             else:
+                raise ValueError(f"unknown rule config {type(config).__name__}")
+        return found
+
+    @staticmethod
+    def _resolve_overlaps(matches: list[_Match]) -> list[_Match]:
+        """Lower priority number wins, then longer match, then earlier start."""
+        accepted: list[_Match] = []
+        for m in sorted(matches, key=lambda m: (m.priority, -(m.end - m.start), m.start)):
+            if all(m.end <= a.start or m.start >= a.end for a in accepted):
+                accepted.append(m)
+        return sorted(accepted, key=lambda m: m.start)
+
+    # Returns the redacted text, or None if the session has no ruleset or anything fails.
+    # With message_id, the spans and the redacted text (llm_content) are also held in memory.
+    # On failure nothing is changed.
+    def apply_rules(self, text: str, session: str, *, message_id: int | None = None) -> str | None:
+        try:
+            ruleset = self.get_ruleset(session)
+            if ruleset is None:
                 return None
 
-        if self._sessions_rulesets[session] not in self._ruleset:
-            rules = self._conn.execute("SELECT rule_id, priority FROM ruleset_rules WHERE ruleset_id = ?", (self._sessions_rulesets[session],)).fetchall()
-            for rule, priority in rules:
-                rule_data = self._conn.execute("SELECT * FROM rules WHERE id = ?", (rule["rule_id"],)).fetchone()
-                if rule_data:
-                    self._ruleset[self._sessions_rulesets[session]].append(Rule(rule_data["id"], rule_data["name"], rule_data["type"], rule_data["config"], priority))
-                else: 
-                    return None
+            matches = self._resolve_overlaps(self._find_matches(text, ruleset))
 
-            self._ruleset[self._sessions_rulesets[session]].sort(key=lambda r: r.priority)
+            records = self._records.get(session)
+            known = records.redactions if records else {}
+            new: dict[str, Redaction] = {}
+            counts: dict[str, int] = {}
+            for r in known.values():
+                counts[r.label] = counts.get(r.label, 0) + 1
+            next_id = len(known) + 1
 
-        for rule in self._ruleset[self._sessions_rulesets[session]]:
-            text = rule.strip(text, session, self._conn)
+            parts: list[str] = []
+            spans: list[RedactionSpan] = []
+            pos = 0
+            for m in matches:
+                original = text[m.start : m.end]
+                redaction = known.get(original) or new.get(original)
+                if redaction is None:
+                    label = m.label.upper()
+                    counts[label] = counts.get(label, 0) + 1
+                    redaction = Redaction(next_id, label, f"[{label}_{counts[label]}]", original)
+                    next_id += 1
+                    new[original] = redaction
+                parts.append(text[pos : m.start])
+                parts.append(redaction.placeholder)
+                if message_id is not None:
+                    spans.append(RedactionSpan(message_id, redaction.id, m.rule_id, m.start, m.end))
+                pos = m.end
+            parts.append(text[pos:])
+            redacted = "".join(parts)
 
-        return text
-
-
-    def get_rules(self) -> list[Rule]:
-        return self._ruleset
-
-# class EmailRedactionRule(BaseRule):
-#     def __init__(self):
-#         super().__init__("email_redaction")
-#         self.email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
-#         self.email_counter = 0
-
-#     def _placeholder(self, email):
-#         if email not in self.store:
-#             self.email_counter += 1
-#             self.store[email] = f"[REDACTED_EMAIL_{self.email_counter}]"
-#         return self.store[email]
-
-#     def strip(self, text):
-#         import re
-#         out = re.sub(self.email_pattern, lambda m: self._placeholder(m.group()), text)
-#         return out
-
-# class PhoneRedactionRule(BaseRule):
-#     def __init__(self):
-#         super().__init__("phone_redaction")
-#         self.phone_pattern = r'(?<!\w)(?:\+\d{1,3}[-.\s]?)?(?:\d[-.\s]?){7,14}\d(?!\w)'
-#         self.phone_counter = 0
-
-#     def _placeholder(self, phone):
-#         if phone not in self.store:
-#             self.phone_counter += 1
-#             self.store[phone] = f"[REDACTED_PHONE_{self.phone_counter}]"
-#         return self.store[phone]
-
-#     def strip(self, text):
-#         import re
-#         out = re.sub(self.phone_pattern, lambda m: self._placeholder(m.group()), text)
-#         return out
-
-# class NameRedactionRule(BaseRule):
-#     def __init__(self):
-#         super().__init__("name_redaction")
-#         self.name_counter = 0
-
-#     def _placeholder(self, name):
-#         if name not in self.store:
-#             self.name_counter += 1
-#             self.store[name] = f"[REDACTED_NAME_{self.name_counter}]"
-#         return self.store[name]
-
-#     def strip(self, text):
-#         import re
-#         out = re.sub(self.name_pattern, lambda m: self._placeholder(m.group()), text)
-#         return out
-
+            # commit only after everything succeeded
+            if records is None:
+                records = self._records.setdefault(session, SessionRecords())
+            records.redactions.update(new)
+            if message_id is not None:
+                records.spans = [s for s in records.spans if s.message_id != message_id] + spans
+                records.llm_content[message_id] = redacted
+            return redacted
+        except Exception as e:
+            # Messages come from re2/rule config, not user text; no traceback (locals) is logged.
+            logger.error("apply_rules failed: %s: %s", type(e).__name__, e)
+            return None

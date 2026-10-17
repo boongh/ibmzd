@@ -20,7 +20,8 @@ class BaseRule:
         if self.type == "regex":
             out = re2.sub(self.email_pattern, lambda m: self._placeholder(m.group()), text)
             return out
-        if self.type == "BERT"
+        if self.type == "BERT":
+            pass
         return text
 
     def restore(self, text):

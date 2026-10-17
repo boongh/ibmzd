@@ -7,7 +7,10 @@ authors = [
     { name = "boon", email = "boonsvj2016@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = ["google-re2"]
+dependencies = [
+    "fastapi[standard]>=0.143.3",
+    "google-re2",
+]
 
 [project.scripts]
 ibmzd = "ibmzd:main"

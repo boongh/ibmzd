@@ -11,8 +11,6 @@ __pycache__/
 node_modules/
 detector/models/*
 !detector/models/.gitkeep
-/frontend/*
-!/frontend/.gitkeep
 build/
 develop-eggs/
 dist/

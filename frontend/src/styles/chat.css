@@ -1,0 +1,269 @@
+.chat-stage {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.welcome-state {
+  width: min(520px, 90%);
+  margin: 48px auto;
+  text-align: center;
+}
+
+.welcome-state h2 {
+  margin-bottom: 7px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.welcome-state > p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.message-list {
+  width: min(690px, 100%);
+  margin: 12px auto 24px;
+  padding: 0 22px;
+}
+
+.message {
+  display: flex;
+  gap: 10px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.message-avatar {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: var(--green);
+}
+
+.message.user .message-avatar {
+  background: #303a33;
+}
+
+.message-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.message-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.message-meta span,
+.message-files {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.message-text {
+  margin: 6px 0 0;
+  color: #4c574e;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message-files {
+  margin-top: 7px;
+}
+
+.stream-cursor {
+  display: inline-block;
+  width: 5px;
+  height: 13px;
+  margin-left: 3px;
+  background: var(--green);
+  animation: blink .9s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.composer {
+  width: min(710px, 88%);
+  margin: 0 auto;
+}
+
+.file-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.file-chip {
+  display: flex;
+  max-width: 260px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+.file-type {
+  padding: 3px 5px;
+  border-radius: 3px;
+  color: var(--green-dark);
+  background: var(--green-light);
+  font-size: 9px;
+}
+
+.file-chip-name {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-chip button {
+  border: 0;
+  background: transparent;
+}
+
+.composer-main {
+  border: 1px solid #d9e1d9;
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.composer-main:focus-within,
+.composer-main.dragging {
+  border-color: var(--green);
+}
+
+.composer-main textarea {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  max-height: 180px;
+  padding: 13px;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.composer-tools,
+.tool-actions,
+.send-tools {
+  display: flex;
+  align-items: center;
+}
+
+.composer-tools {
+  min-height: 42px;
+  justify-content: space-between;
+  padding: 5px 9px 8px 13px;
+}
+
+.tool-actions,
+.send-tools {
+  gap: 9px;
+}
+
+.attach-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.attach-button img {
+  width: 15px;
+  height: 15px;
+}
+
+.attach-button input {
+  display: none;
+}
+
+.tool-separator {
+  width: 1px;
+  height: 15px;
+  background: var(--line);
+}
+
+.supported-formats,
+.character-count {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.send-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  color: white;
+  background: var(--green);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.send-button:hover:not(:disabled),
+.primary-button:hover:not(:disabled) {
+  background: var(--green-dark);
+}
+
+.send-button img {
+  width: 14px;
+  height: 14px;
+}
+
+.button-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ffffff66;
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.composer-footnote {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 1px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.composer-footnote span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.composer-footnote img {
+  width: 13px;
+  height: 13px;
+}

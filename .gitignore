@@ -8,6 +8,9 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+node_modules/
+detector/models/*
+!detector/models/.gitkeep
 build/
 develop-eggs/
 dist/
@@ -151,6 +154,8 @@ activemq-data/
 
 # Environments
 .env
+.env.*
+!.env.example
 .envrc
 .venv
 env/

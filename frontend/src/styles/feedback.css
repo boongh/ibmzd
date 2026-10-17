@@ -1,0 +1,50 @@
+.alert {
+  display: flex;
+  width: min(710px, 88%);
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 auto 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.alert > span:first-child {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  border-radius: 50%;
+  font-weight: 700;
+}
+
+.alert strong {
+  font-size: 12px;
+}
+
+.alert p {
+  margin: 3px 0 0;
+  line-height: 1.45;
+}
+
+.alert > button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  font-size: 17px;
+}
+
+.alert-error {
+  color: var(--danger);
+  background: #fff5f3;
+  border-color: #f1d6d2;
+}
+
+.alert-success {
+  align-items: center;
+  color: var(--green-dark);
+  background: var(--green-light);
+  border-color: #dbeadd;
+}

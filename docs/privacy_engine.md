@@ -1,12 +1,13 @@
 PRIVACY ENGINE - INTEGRATION GUIDE
 ==================================
 
-Module: src/ibmzd/privacy_engine.py
-Class:  PrivacyEngine
+Modules: src/ibmzd/privacy_engine.py   (PrivacyEngine)
+         src/ibmzd/privacy_models.py   (plain-Python data structs)
 
 The engine does all redaction itself (and restoration, if the stretch goal is
-built). It does not talk to the LLM or the frontend. Whoever wires it in
-(API layer) only has to do three things:
+built). It does not talk to the LLM, the frontend or the database. It is
+in-memory only and never writes to disk. Whoever wires it in (API layer) has
+to do three things:
 
   1. Hold the ORIGINAL user text.
   2. Pass it to the engine together with the correct SESSION ID.
@@ -16,120 +17,150 @@ built). It does not talk to the LLM or the frontend. Whoever wires it in
 QUICK START
 -----------
 
-    from ibmzd.privacy_engine import (
-        PrivacyEngine, EmailRedactionRule, PhoneRedactionRule, NameRedactionRule,
-    )
+    from ibmzd.privacy_engine import PrivacyEngine
+    from ibmzd.privacy_models import Rule, RegexRuleConfig, Ruleset, RulesetEntry
 
-    engine = PrivacyEngine()                      # create once at app startup
-    engine.add_rule(EmailRedactionRule())
-    engine.add_rule(PhoneRedactionRule())
-    engine.add_rule(NameRedactionRule())
+    ruleset = Ruleset(1, "default", [
+        RulesetEntry(Rule(1, "email", RegexRuleConfig(r"[\w.+-]+@[\w-]+\.\w+", "EMAIL")), priority=0),
+    ])
 
-    session_id = engine.create_session()          # once per conversation
-    redacted = engine.apply_rules(user_text, session_id)
+    engine = PrivacyEngine(ruleset_loader=lambda session_id: ruleset)
+    redacted = engine.apply_rules(user_text, session_id, message_id=msg_id)
+    if redacted is None:
+        ...                                       # fail closed: return an error
     reply = llm.chat(redacted)                    # only the redacted text goes out
 
+See scripts/test_privacy_engine.py for a fuller example.
 
-API
----
 
-PrivacyEngine()
-    Creates an engine with an empty ruleset. Nothing is redacted until rules
-    are added.
+DATA STRUCTS (privacy_models.py)
+--------------------------------
 
-create_session() -> str
-    Returns a new random session ID (16 chars). Call it once per conversation
-    and keep the ID with that conversation.
+They mirror the DB tables but hold only what the engine needs. All are
+dataclasses; all except SessionRecords are frozen.
 
-add_rule(rule: BaseRule) -> str
-    Appends a rule and returns its ID. Rules run in the order they were added.
+    RegexRuleConfig(pattern, label)          rules.config, type "regex" (google-re2 syntax)
+    NerRuleConfig(entities)                  rules.config, type "ner" (e.g. ["identity.person_name"])
+    Rule(id, name, config)                   rules row
+    RulesetEntry(rule, priority=0,           ruleset_rules row with the rule inlined.
+                 enabled=True)               Lower priority runs first and wins overlaps.
+                                             enabled=False entries are skipped.
+    Ruleset(id, name, entries)               rulesets row + its entries
+    Redaction(id, label, placeholder,        redactions row. `id` is LOCAL to the engine
+              original)                      (1, 2, 3 ... per session); real DB ids come later.
+    RedactionSpan(message_id,                redaction_spans row. start_pos/end_pos are
+                  redaction_id, rule_id,     str indices into the ORIGINAL text passed to
+                  start_pos, end_pos)        apply_rules. redaction_id is the local Redaction.id.
+    SessionRecords(redactions, spans,        What the engine holds per session:
+                   llm_content)                redactions: dict[original text -> Redaction]
+                                               spans:      list[RedactionSpan]
+                                               llm_content: dict[message_id -> redacted text]
 
-remove_rule(id: str) -> bool
-    Removes the rule with that ID. Returns True on success.
+Not mirrored on purpose: users, chat_sessions, messages (including raw
+`content`). The engine only needs the session id and, optionally, the message id.
 
-get_rules() -> list[BaseRule]
-    Returns the current ruleset, in execution order.
 
-apply_rules(text: str, session: str) -> str
-    Runs every rule over `text` and returns the redacted text.
-    Pass the session ID of the conversation the text belongs to.
+API (PrivacyEngine)
+-------------------
+
+PrivacyEngine(ruleset_loader=None, ner_detector=None)
+    ruleset_loader: Callable[[session_id], Ruleset | None]. Called on a cache
+        miss or refresh. Supplied by the integrator (see TO DO LATER).
+    ner_detector:   Callable[[text, entities], list[(start, end, label)]].
+        No NER model is bundled. Offsets are into `text`. A ruleset with an
+        NER rule and no detector makes apply_rules() return None.
+
+apply_rules(text: str, session: str, *, message_id: int | None = None) -> str | None
+    Redacts `text` with the session's ruleset and returns the redacted text.
+    Returns None (never raises) if the session has no ruleset or anything
+    fails. The error is logged on the `ibmzd.privacy_engine` logger as
+    "<ExceptionType>: <message>", no traceback. On failure the engine's state
+    is unchanged. Callers MUST treat None as an error and not forward the
+    original text.
+    With message_id, the spans and the redacted text (llm_content) are also
+    held in memory; calling again for the same message replaces them. The
+    message does not have to exist anywhere; nothing is validated.
+    Without message_id only the redaction mapping is updated (so numbering
+    stays consistent), no spans are kept.
+
+Ruleset cache (one cached Ruleset per session):
+    set_ruleset(session, ruleset)     put/replace the cached ruleset by hand
+    refresh_ruleset(session) -> bool  drop the cache entry and reload via ruleset_loader;
+                                      False if no loader, it returns None, or it raises
+    invalidate_ruleset(session)       drop the entry; reloaded lazily on next apply_rules
+    clear_ruleset_cache()             drop all entries
+    get_ruleset(session)              cached ruleset (loads on miss) or None
+    The cache is never refreshed automatically: after rules change, call one
+    of the above.
+
+Held records:
+    get_records(session) -> SessionRecords | None   the LIVE object, treat as read-only
+    forget_session(session)                         evict records + cached ruleset
+
+
+HOW REDACTION WORKS
+-------------------
+
+  - Every enabled rule runs against the ORIGINAL text (no chaining).
+  - Overlaps are resolved by lower priority number, then longer match, then
+    earlier start. The text is rewritten once, so span offsets are exact
+    positions in the original text.
+  - Placeholders are [LABEL_n], numbered per session and label ([PERSON_1],
+    [EMAIL_2], ...). The same original value in a session always reuses its
+    Redaction, so it always gets the same placeholder (even if another rule
+    or label matches it later). A new session restarts at _1.
 
 
 SESSION IDs
 -----------
 
-The session ID is how the engine keeps placeholders consistent and (for
-restoration) remembers which original value each placeholder stands for.
-
-  - Always pass the same ID for every message in one conversation.
-  - Use a new ID (create_session()) for a new conversation.
-  - Never share an ID between users or conversations.
-  - Passing the wrong ID gives wrong placeholder numbering and, once
-    restoration exists, restores the wrong values. The caller owns this.
-
-
-BUILT-IN RULES
---------------
-
-    EmailRedactionRule   alice@example.com     -> [REDACTED_EMAIL_1]
-    PhoneRedactionRule   +1 555-123-4567       -> [REDACTED_PHONE_1]
-    NameRedactionRule    person names          -> [REDACTED_NAME_1]
-
-Within one session the same value always maps to the same placeholder, and a
-different value gets the next number (EMAIL_1, EMAIL_2, ...).
-
-
-WHAT THE INTEGRATOR HANDLES
----------------------------
-
-Per request, the API layer deals with two texts and one ID:
-
-    original_text   what the user typed. Keep it only in memory for the
-                    length of the request. Never log it, store it, or send it
-                    to the LLM.
-    redacted_text   what apply_rules() returned. This is the only version
-                    that may go to the LLM or into logs.
-    session_id      identifies the conversation. Created once, supplied on
-                    every call.
-
-Flow:
-
-    user_text -> apply_rules(user_text, session_id) -> redacted_text -> LLM
-    LLM reply -> frontend
-
-MVP: the LLM reply is shown to the user as-is, placeholders included.
-Stretch goal (restoration): the engine swaps placeholders in the LLM reply
-back to the original values for that session. The integrator then passes the
-LLM reply plus the same session ID to the engine and shows what it returns.
-The restore call is not part of the public API yet; this section will be
-updated when it is.
+The session id keys the ruleset cache and the held records. Always pass the
+same id for every message in one conversation, a new id for a new
+conversation, and never share one between users.
 
 
 RULES FOR CALLERS (from AGENTS.md)
 ----------------------------------
 
   - Every LLM request goes through the engine. No bypass or debug path.
-  - Fail closed: if apply_rules() raises, return an error to the user. Do not
-    forward the original text.
+  - Fail closed: if apply_rules() returns None, return an error to the user.
   - Never log raw user text or placeholder-to-value mappings. Log redacted
-    text or metadata only (counts, entity types).
-  - Do not persist original text or mappings anywhere.
+    text or metadata only. The engine's own error logs contain exception
+    messages from re2 / rule config / the loader, not user text; a loader or
+    detector that puts user text into exceptions would break this.
+  - Do not persist original text or mappings without a decision (see below).
   - Tests and examples use synthetic PII only.
 
 
-CURRENT STATUS (known gaps in the code)
----------------------------------------
+TESTING
+-------
 
-The module is mid-iteration and does not run yet. The guide above describes
-the intended interface.
+    uv run python scripts/test_privacy_engine.py
 
-  - privacy_engine.py has a syntax error in BaseRule.strip
-    (`if self.type == "BERT"` is missing its colon and body).
-  - Rules use `self.store`, which is never initialised, so the built-in
-    rules fail on first match.
-  - apply_rules() accepts `session` but does not use it yet, so
-    placeholders are not scoped per session.
-  - NameRedactionRule references `self.name_pattern`, which is not defined.
-  - Restoration is not implemented (BaseRule.restore is a stub).
-  - test_privacy_engine.py calls apply_rules(text) without a session
-    argument and needs updating to the two-argument form.
+Pure Python, no database. Checks redaction, per-session placeholder
+consistency, priority/overlap handling, span offsets, llm_content, NER via a
+fake detector, disabled rules, ruleset cache refresh/override/invalidate,
+eviction, and the return-None failure paths.
+
+
+TO DO LATER (not implemented; marked `TODO(DB)` in the code)
+------------------------------------------------------------
+
+  1. Ruleset loading: write the ruleset_loader that builds a Ruleset (with
+     Rule / RulesetEntry) from chat_sessions.ruleset_id, rulesets,
+     ruleset_rules and rules rows. rules.config JSON maps to RegexRuleConfig /
+     NerRuleConfig.
+  2. Persistence: after apply_rules, save get_records(session) (redactions,
+     spans, llm_content -> messages.llm_content) to the DB, mapping the local
+     Redaction.id values to real DB ids, then call forget_session() when the
+     session ends. Until then, records live only in engine memory, grow for
+     the life of the process, and are lost on restart (so placeholder
+     numbering restarts too).
+  3. Loading existing records: on restart the engine does not reload earlier
+     redactions, so a continuing session would renumber from _1. A way to seed
+     SessionRecords is needed.
+  4. Decide where raw `original` values may be stored. AGENTS.md says "no PII
+     persistence"; restoration needs the mapping.
+  5. An NER detector.
+  6. Restoration (stretch goal): not implemented; Redaction and RedactionSpan
+     hold what it needs.

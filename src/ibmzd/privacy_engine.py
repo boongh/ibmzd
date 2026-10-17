@@ -1,4 +1,5 @@
 import logging
+import re
 from dataclasses import dataclass
 from typing import Callable
 
@@ -179,4 +180,28 @@ class PrivacyEngine:
         except Exception as e:
             # Messages come from re2/rule config, not user text; no traceback (locals) is logged.
             logger.error("apply_rules failed: %s: %s", type(e).__name__, e)
+            return None
+
+    def restore_text(self, text: str, session: str) -> str | None:
+        """Replace the session's placeholders in `text` with their original values.
+
+        `text` can be any text containing placeholders, e.g. an LLM reply. Placeholders are
+        matched case-insensitively; unknown placeholders and all other text are left as-is.
+        Replacement is a single pass, so an original that looks like a placeholder is not
+        substituted again. Returns None if the session has no records or anything fails.
+        """
+        try:
+            records = self._records.get(session)
+            if records is None:
+                return None
+            by_placeholder = {r.placeholder.upper(): r.original for r in records.redactions.values()}
+            if not by_placeholder:
+                return text
+            pattern = re.compile(
+                "|".join(re.escape(p) for p in sorted(by_placeholder, key=len, reverse=True)),
+                re.IGNORECASE,
+            )
+            return pattern.sub(lambda m: by_placeholder[m.group().upper()], text)
+        except Exception as e:
+            logger.error("restore_text failed: %s: %s", type(e).__name__, e)
             return None

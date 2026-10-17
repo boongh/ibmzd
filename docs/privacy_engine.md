@@ -83,6 +83,16 @@ apply_rules(text: str, session: str, *, message_id: int | None = None) -> str | 
     Without message_id only the redaction mapping is updated (so numbering
     stays consistent), no spans are kept.
 
+restore_text(text: str, session: str) -> str | None
+    Replaces the session's placeholders in `text` with their original values.
+    `text` can be anything, e.g. an LLM reply. Matching is case-insensitive;
+    unknown placeholders and other text are left as-is. One pass, so an
+    original that looks like a placeholder is not substituted again. Returns
+    None (logged, never raises) if the session has no records (apply_rules
+    never ran for it, or it was forgotten) or anything fails. The result
+    contains raw PII: show it to the user only, never log it or send it to the
+    LLM.
+
 Ruleset cache (one cached Ruleset per session):
     set_ruleset(session, ruleset)     put/replace the cached ruleset by hand
     refresh_ruleset(session) -> bool  drop the cache entry and reload via ruleset_loader;
@@ -138,7 +148,7 @@ TESTING
     uv run python scripts/test_privacy_engine.py
 
 Pure Python, no database. Checks redaction, per-session placeholder
-consistency, priority/overlap handling, span offsets, llm_content, NER via a
+consistency, restore_text, priority/overlap handling, span offsets, llm_content, NER via a
 fake detector, disabled rules, ruleset cache refresh/override/invalidate,
 eviction, and the return-None failure paths.
 
@@ -162,5 +172,5 @@ TO DO LATER (not implemented; marked `TODO(DB)` in the code)
   4. Decide where raw `original` values may be stored. AGENTS.md says "no PII
      persistence"; restoration needs the mapping.
   5. An NER detector.
-  6. Restoration (stretch goal): not implemented; Redaction and RedactionSpan
-     hold what it needs.
+  6. Restoration across restarts: restore_text works from the in-memory
+     records only (see item 3).

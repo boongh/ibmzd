@@ -226,3 +226,13 @@ __marimo__/
 
 # Agents
 .claude/settings.local.json
+
+### Editor ignores
+.idea/
+.vscode/
+
+### Project ignores
+config.toml
+*.db
+*.db-wal
+*.db-shm

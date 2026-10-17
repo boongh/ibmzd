@@ -81,9 +81,15 @@ def redact_text(request: RedactRequest):
                 detail="Redaction unavailable for this session",
             )
 
-        answer = call_llm(redacted_text)
+        """ Retrieves the LLM response and restores placeholder entities  """
+        llm_response = call_llm(redacted_text)
+
+        restored_response = engine.restore_text(
+            llm_response,
+            request.session_id,
+        )
         
-        return {"redacted_text": redacted_text, "answer": answer}
+        return {"redacted_text": redacted_text, "answer": restored_response}
 
     except HTTPException:
         raise

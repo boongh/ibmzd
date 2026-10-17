@@ -3,11 +3,6 @@ name = "ibmzd"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-<<<<<<< Updated upstream
-requires-python = ">=3.12"
-dependencies = []
-
-=======
 authors = [
     { name = "boon", email = "boonsvj2016@gmail.com" }
 ]
@@ -20,4 +15,3 @@ ibmzd = "ibmzd:main"
 [build-system]
 requires = ["uv_build>=0.12.10,<0.13.0"]
 build-backend = "uv_build"
->>>>>>> Stashed changes

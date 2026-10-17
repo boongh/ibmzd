@@ -228,3 +228,6 @@ __marimo__/
 
 ### Project ignores
 config.toml
+*.db
+*.db-wal
+*.db-shm

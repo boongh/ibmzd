@@ -1,3 +1,5 @@
+import re
+
 from contextlib import contextmanager, nullcontext
 from types import SimpleNamespace
 
@@ -7,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from src import llm
+from src.db import BUILTIN_RULES
 from src.ner import MAX_TOKENS, LfmPiiDetector, TextTooLongError, short_label
 from src.schemas import LlmModelCreate, RulesetUpdate
 from src.security import hash_password, verify_password
@@ -92,3 +95,25 @@ def test_ner_detector_keeps_selected_types_with_short_labels():
 def test_ner_detector_rejects_too_long_texts():
     with pytest.raises(TextTooLongError):
         _fake_detector([], tokens=MAX_TOKENS + 1)("long text", ["identity.person_name"])
+
+
+BUILTIN_PATTERNS = {key: config.pattern for key, _, config in BUILTIN_RULES}
+
+
+@pytest.mark.parametrize(
+    "key, text, expected",
+    [
+        ("card_number", "卡号1234567890123456", ["1234567890123456"]),
+        ("card_number", "1234 5678 9012 3456", ["1234 5678 9012 3456"]),
+        ("card_number", "1234-5678-9012-3456", ["1234-5678-9012-3456"]),
+        ("card_number", "1234 5678-9012 3456", []),  # mixed separators
+        ("card_number", "12345678901234567", []),  # 17 digits
+        ("uk_postcode", "寄到SW1A 1AA谢谢", ["SW1A 1AA"]),
+        ("uk_postcode", "m1 1ae", ["m1 1ae"]),
+        ("uk_postcode", "GIR 0AA", ["GIR 0AA"]),
+        ("uk_postcode", "SW1A 1AAA", []),
+        ("uk_postcode", "Q1 1AA", []),  # Q is never a first letter
+    ],
+)
+def test_builtin_rule_patterns(key, text, expected):
+    assert [m.group(0) for m in re.finditer(BUILTIN_PATTERNS[key], text)] == expected

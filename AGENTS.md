@@ -58,4 +58,5 @@ Chat frontend      <- API          <- response ---------------------+
 
 ## Open decisions (ask the user before acting on any of these)
 
-- Whether chatting keeps the frontend's preview / review step before sending (the backend currently redacts and sends in one call)
+- None at the moment. The frontend's preview / review step before sending was dropped: messages are redacted
+  and sent in one call, and the privacy details are shown afterwards.

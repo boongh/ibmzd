@@ -7,9 +7,8 @@ values are restored in the reply for the user.
 ## Repository status
 
 - `src/`: FastAPI backend with SQLite storage and the privacy engine.
-- `frontend/`: Vue frontend. It still calls the routes it was designed against
-  (see [Frontend/API integration](#frontendapi-integration)) and is not wired
-  to the backend yet.
+- `frontend/`: Vue frontend for the backend API (see
+  [Frontend/API integration](#frontendapi-integration)).
 
 ## Repository layout
 
@@ -49,9 +48,11 @@ values are restored in the reply for the user.
     └── src/
         ├── App.vue
         ├── main.js
-        ├── components/
-        ├── composables/
-        ├── services/
+        ├── components/        # auth, layout, chat, rules, rulesets, models
+        ├── composables/       # useAuth, useLibrary (rules / rulesets / models), useChat
+        ├── constants/         # NER entity types
+        ├── services/api.js    # API client (token, SSE)
+        ├── utils/             # keyword <-> regex, placeholder restoring
         └── styles/
 ```
 
@@ -160,19 +161,22 @@ request fails with 422 and nothing is sent or stored.
 
 ## Frontend/API integration
 
-The frontend was designed against these routes, which the backend does not
-implement yet:
+The frontend calls the [backend API](#backend-api) under `/api` (the Vite dev
+server and Caddy strip the prefix). The login token is kept in
+`sessionStorage`; a 401 returns to the login page.
 
-- `POST /chat/prepare` (multipart fields `conversation_id`, `message`, and repeated `files`)
-- `POST /chat/preview/update`
-- `POST /chat/send` (Server-Sent Events response)
-- `GET/POST/PUT/DELETE /rules`, `POST /rules/test`
-- `GET /conversations`, `DELETE /conversations/{id}`
-
-Preview data is expected to include `cleaned_text` and `detections`; optional
-fields include `original_with_highlights`/`original_text` and `warnings`.
-`preview_id` is needed to persist detection toggles or manual detections through
-`/chat/preview/update` and is forwarded with the approved `/chat/send` request.
-Stream events are read from SSE `data:` fields. Backend errors are surfaced in
-the UI; the frontend does not mock successful responses or fall back to
-sending the original prompt.
+- **Chat**: a new conversation is created on its first message, bound to the
+  ruleset and model chosen above the chat (both can be changed later). Messages
+  are redacted and sent in one step; the reply streams in with placeholders
+  restored from the session's replacement table. "Privacy details" on a message
+  shows the original, what was exchanged with the AI and the protected values.
+  Conversation titles use the redacted first message.
+- **Rules**: *Keywords* (a list of words / phrases and the type they are
+  replaced as, e.g. `PROJECT`; stored as the regex `(?i)(?:keyword|...)`) or
+  *NER* (entity types to replace; a new NER rule starts with all types
+  selected). Built-in rules are read only: Email, Card number (16 digits,
+  contiguous or in groups of four) and UK postcode (`src/db.py`). Registering
+  creates a "Default" ruleset with the built-in rules.
+- **Rulesets**: which rules apply, with their priority (lower wins overlaps)
+  and on / off switch.
+- **LLM models**: OpenAI compatible endpoints; the API key is write only.

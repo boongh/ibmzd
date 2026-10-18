@@ -136,3 +136,20 @@ def test_logs_have_metadata_but_no_pii(client, login, new_session, send, fake_ll
     assert "Login failed" in logs
     for secret in (EMAIL, PHONE, "邮箱", "alice", "password-123", "wrong-password"):
         assert secret not in logs
+
+
+def test_register_creates_default_ruleset_with_builtin_rules(client, login, send, fake_llm):
+    headers = login()
+    builtin = [r for r in client.get("/rules", headers=headers).json() if r["owner_id"] is None]
+    assert {r["builtin_key"] for r in builtin} == {"email", "card_number", "uk_postcode"}
+    assert client.patch(f"/rules/{builtin[0]['id']}", json={"name": "x"}, headers=headers).status_code == 403
+
+    (default,) = client.get("/rulesets", headers=headers).json()
+    assert default["name"] == "Default"
+    assert {e["rule"]["id"] for e in default["entries"]} == {r["id"] for r in builtin}
+
+    model = {"name": "m", "base_url": "http://llm.invalid/v1", "model": "fake"}
+    model_id = client.post("/llm-models", json=model, headers=headers).json()["id"]
+    session = client.post("/sessions", json={"ruleset_id": default["id"], "llm_model_id": model_id}, headers=headers)
+    events = send(headers, session.json()["id"], f"邮箱{EMAIL}，卡号1234 5678 9012 3456，邮编SW1A 1AA")
+    assert events[0]["llm_content"] == "邮箱[EMAIL_1]，卡号[CARD_NUMBER_1]，邮编[POSTAL_CODE_1]"

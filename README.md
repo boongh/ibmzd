@@ -34,8 +34,7 @@ values are restored in the reply for the user.
 │   ├── privacy_service.py     # engine <-> database glue
 │   ├── llm.py                 # OpenAI compatible streaming client
 │   └── ner.py                 # optional NER detector
-├── scripts/
-│   └── test_privacy_engine.py
+├── tests/                     # uv run pytest
 ├── docs/
 │   └── privacy_engine.md
 └── frontend/
@@ -65,6 +64,18 @@ NER rules need the [LFM2.5-Encoder-350M-PII-Detector](https://huggingface.co/Liq
 model: download it to a local directory, install `torch` and `transformers`,
 and set `[ner] model_path` in `config.toml`. Without it, sessions whose ruleset
 contains an NER rule refuse to chat.
+
+## Run the tests
+
+```sh
+uv run pytest
+```
+
+Tests live in `tests/` and only use synthetic PII: unit tests (`test_units.py`,
+`test_privacy_engine.py`) and API integration tests (`test_api.py`), where the
+LLM is replaced by a fake. The NER tests are commented out until the NER model
+is integrated. Run them through pytest (e.g. PyCharm's pytest runner), not as
+plain Python scripts.
 
 ## Run the frontend
 

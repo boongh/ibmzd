@@ -30,7 +30,7 @@ QUICK START
         ...                                       # fail closed: return an error
     reply = llm.chat(redacted)                    # only the redacted text goes out
 
-See scripts/test_privacy_engine.py for a fuller example.
+See tests/test_privacy_engine.py for fuller examples.
 
 
 DATA STRUCTS (privacy_models.py)
@@ -147,12 +147,13 @@ RULES FOR CALLERS (from AGENTS.md)
 TESTING
 -------
 
-    uv run python scripts/test_privacy_engine.py
+    uv run pytest tests/test_privacy_engine.py
 
 Pure Python, no database. Checks redaction, per-session placeholder
-consistency, restore_text, priority/overlap handling, span offsets, llm_content, NER via a
-fake detector, disabled rules, ruleset cache refresh/override/invalidate,
-eviction, and the return-None failure paths.
+consistency, restore_text, priority/overlap handling, span offsets, llm_content,
+disabled rules, ruleset cache refresh/override/invalidate, eviction, and the
+return-None failure paths. The NER tests (with a fake detector) are written but
+commented out until the NER model is integrated.
 
 
 TO DO LATER (not implemented; marked `TODO(DB)` in the code)

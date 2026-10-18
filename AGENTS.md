@@ -51,10 +51,11 @@ Chat frontend      <- API          <- response ---------------------+
   - `uv sync` to install, `uv add <pkg>` to add a dependency (ask first, per the rules above).
   - Copy `example.toml` to `config.toml` (git-ignored), then `uv run python main.py` starts the API.
 - Backend code lives flat in `src/` (no package). Import modules as `from src.xxx import ...` and run from the repository root.
+- Tests: pytest, in `tests/`. Run `uv run pytest` from the repository root (`uv sync` installs the dev dependencies).
+  Tests never call a real LLM (use the `fake_llm` fixture). The NER tests are commented out until the NER model is integrated.
 - Frontend: `cd frontend && npm install && npm run dev` (see README).
 - Never commit secrets. Users' LLM API keys are stored in the local database and are never returned by the API.
 
 ## Open decisions (ask the user before acting on any of these)
 
 - Whether chatting keeps the frontend's preview / review step before sending (the backend currently redacts and sends in one call)
-- Test framework and how tests are run

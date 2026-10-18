@@ -3,8 +3,6 @@ import re
 from dataclasses import dataclass
 from typing import Callable
 
-import re2
-
 from ibmzd.privacy_models import (
     NerRuleConfig,
     Redaction,
@@ -117,7 +115,7 @@ class PrivacyEngine:
                 continue
             rule, config = entry.rule, entry.rule.config
             if isinstance(config, RegexRuleConfig):
-                for m in re2.finditer(config.pattern, text):
+                for m in re.finditer(config.pattern, text):
                     if m.end() > m.start():
                         found.append(_Match(m.start(), m.end(), config.label, rule.id, entry.priority))
             elif isinstance(config, NerRuleConfig):

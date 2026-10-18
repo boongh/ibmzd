@@ -53,6 +53,33 @@ class User(UserBase, table=True):
     password_hash: str
 
 
+class AuthToken(SQLModel, table=True):
+    """Login token; only its sha256 is stored, never the token itself"""
+
+    __tablename__ = "auth_tokens"
+
+    token_hash: str = Field(primary_key=True)
+    user_id: int = Field(foreign_key="users.id", ondelete="CASCADE", index=True)
+    expires_at: int  # unix timestamp
+
+
+class LlmModelBase(SQLModel):
+    name: str = Field(min_length=1, max_length=64)
+    base_url: str = Field(min_length=1, max_length=512)  # OpenAI compatible, e.g. https://api.openai.com/v1
+    model: str = Field(min_length=1, max_length=128)  # model name sent to the API, e.g. gpt-4o-mini
+
+
+class LlmModel(LlmModelBase, table=True):
+    """User's external OpenAI compatible LLM"""
+
+    __tablename__ = "llm_models"
+    __table_args__ = (UniqueConstraint("owner_id", "name"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    owner_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
+    api_key: str | None = None  # never returned by the API
+
+
 class RuleBase(SQLModel):
     name: str = Field(min_length=1, max_length=64)
     config: RuleConfig = Field(sa_type=RuleConfigType)
@@ -97,14 +124,15 @@ class RulesetRule(SQLModel, table=True):
 
 
 class ChatSession(SQLModel, table=True):
-    """The user of the session can only use their own rulesets"""
+    """The user of the session can only use their own rulesets and LLM models"""
 
     __tablename__ = "chat_sessions"
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", ondelete="CASCADE", index=True)
     ruleset_id: int | None = Field(default=None, foreign_key="rulesets.id", ondelete="SET NULL")
-    title: str | None = None
+    llm_model_id: int | None = Field(default=None, foreign_key="llm_models.id", ondelete="SET NULL")
+    title: str | None = Field(default=None, max_length=128)
 
 
 Role = Literal["system", "user", "assistant"]

@@ -7,7 +7,8 @@ from src import config
 
 if __name__ == "__main__":
     logger.remove()
-    temp_logger = logger.add(sys.stderr, level="DEBUG")
+    # diagnose=False: otherwise tracebacks print the values of local variables, i.e. raw user text (AGENTS.md)
+    temp_logger = logger.add(sys.stderr, level="DEBUG", diagnose=False)
     logger.debug("Starting GateKeeper")
 
     try:
@@ -19,7 +20,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     logger.remove(temp_logger)
-    logger.add(sys.stderr, level=app_conf.log.level)
+    logger.add(sys.stderr, level=app_conf.log.level, diagnose=False)
     logger.info(f"Log level set to {app_conf.log.level}")
 
     app.run(app_conf)

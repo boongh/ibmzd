@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable
 
-from ibmzd.privacy_models import (
+from src.privacy_models import (
     NerRuleConfig,
     Redaction,
     RedactionSpan,
@@ -20,10 +20,6 @@ logger = logging.getLogger(__name__)
 NerDetector = Callable[[str, list[str]], list[tuple[int, int, str]]]
 # (session) -> Ruleset | None
 RulesetLoader = Callable[[str], Ruleset | None]
-# (redactions) -> None
-_db_insert_redaction_map = Callable[[list[Redaction]], None]
-# (message_id, redacted text) -> None
-_db_insert_redacted_content = Callable[[int, str], None]
 
 ##-------------------------------------
 
@@ -43,13 +39,9 @@ class PrivacyEngine:
         self,
         ruleset_loader: RulesetLoader | None = None,
         ner_detector: NerDetector | None = None,
-        db_insert_redaction_map: _db_insert_redaction_map | None = None,
-        db_insert_redacted_content: _db_insert_redacted_content | None = None,
     ):
         self._ruleset_loader = ruleset_loader
         self._ner_detector = ner_detector
-        self._db_insert_redaction_map = db_insert_redaction_map
-        self._db_insert_redacted_content = db_insert_redacted_content
         self._rulesets: dict[str, Ruleset] = {}  # ruleset cache, per session
         self._records: dict[str, SessionRecords] = {}  # held until the integrator persists/evicts them
 
@@ -97,6 +89,11 @@ class PrivacyEngine:
         """Redactions, spans and llm_content held for a session (the live object, treat as read-only)."""
         return self._records.get(session)
 
+    def set_records(self, session: str, records: SessionRecords) -> None:
+        """Seed (or replace) a session's records, e.g. with redactions loaded from the DB, so that
+        placeholder numbering and restore_text continue from them. Redaction ids must be 1..n."""
+        self._records[session] = records
+
     def forget_session(self, session: str) -> None:
         """Evict a session's records and cached ruleset from memory."""
         self._records.pop(session, None)
@@ -132,7 +129,7 @@ class PrivacyEngine:
     def _resolve_overlaps(matches: list[_Match]) -> list[_Match]:
         """Lower priority number wins, then longer match, then earlier start."""
         accepted: list[_Match] = []
-        for m in sorted(matches, key=lambda m: (-(m.end - m.start), m.start)):
+        for m in sorted(matches, key=lambda m: (m.priority, -(m.end - m.start), m.start)):
             if all(m.end <= a.start or m.start >= a.end for a in accepted):
                 accepted.append(m)
         return sorted(accepted, key=lambda m: m.start)
@@ -184,11 +181,11 @@ class PrivacyEngine:
                 records = self._records.setdefault(session, SessionRecords())
             records.redactions.update(new)
             if message_id is not None:
-                self._db_insert_redaction_map(new.values())
-                self._db_insert_redacted_content(message_id, redacted)
+                records.spans = [s for s in records.spans if s.message_id != message_id] + spans
+                records.llm_content[message_id] = redacted
             return redacted
         except Exception as e:
-            # Messages come from re2/rule config, not user text; no traceback (locals) is logged.
+            # Messages come from re/rule config, not user text; no traceback (locals) is logged.
             logger.error("apply_rules failed: %s: %s", type(e).__name__, e)
             return None
 

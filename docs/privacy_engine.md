@@ -1,8 +1,8 @@
 PRIVACY ENGINE - INTEGRATION GUIDE
 ==================================
 
-Modules: src/ibmzd/privacy_engine.py   (PrivacyEngine)
-         src/ibmzd/privacy_models.py   (plain-Python data structs)
+Modules: src/privacy_engine.py         (PrivacyEngine)
+         src/privacy_models.py         (plain-Python data structs)
 
 The engine does all redaction itself (and restoration, if the stretch goal is
 built). It does not talk to the LLM, the frontend or the database. It is
@@ -17,8 +17,8 @@ to do three things:
 QUICK START
 -----------
 
-    from ibmzd.privacy_engine import PrivacyEngine
-    from ibmzd.privacy_models import Rule, RegexRuleConfig, Ruleset, RulesetEntry
+    from src.privacy_engine import PrivacyEngine
+    from src.privacy_models import Rule, RegexRuleConfig, Ruleset, RulesetEntry
 
     ruleset = Ruleset(1, "default", [
         RulesetEntry(Rule(1, "email", RegexRuleConfig(r"[\w.+-]+@[\w-]+\.\w+", "EMAIL")), priority=0),
@@ -30,7 +30,7 @@ QUICK START
         ...                                       # fail closed: return an error
     reply = llm.chat(redacted)                    # only the redacted text goes out
 
-See scripts/test_privacy_engine.py for a fuller example.
+See tests/test_privacy_engine.py for fuller examples.
 
 
 DATA STRUCTS (privacy_models.py)
@@ -39,7 +39,7 @@ DATA STRUCTS (privacy_models.py)
 They mirror the DB tables but hold only what the engine needs. All are
 dataclasses; all except SessionRecords are frozen.
 
-    RegexRuleConfig(pattern, label)          rules.config, type "regex" (google-re2 syntax)
+    RegexRuleConfig(pattern, label)          rules.config, type "regex" (Python re syntax)
     NerRuleConfig(entities)                  rules.config, type "ner" (e.g. ["identity.person_name"])
     Rule(id, name, config)                   rules row
     RulesetEntry(rule, priority=0,           ruleset_rules row with the rule inlined.
@@ -73,7 +73,7 @@ PrivacyEngine(ruleset_loader=None, ner_detector=None)
 apply_rules(text: str, session: str, *, message_id: int | None = None) -> str | None
     Redacts `text` with the session's ruleset and returns the redacted text.
     Returns None (never raises) if the session has no ruleset or anything
-    fails. The error is logged on the `ibmzd.privacy_engine` logger as
+    fails. The error is logged on the `src.privacy_engine` logger as
     "<ExceptionType>: <message>", no traceback. On failure the engine's state
     is unchanged. Callers MUST treat None as an error and not forward the
     original text.
@@ -105,6 +105,8 @@ Ruleset cache (one cached Ruleset per session):
 
 Held records:
     get_records(session) -> SessionRecords | None   the LIVE object, treat as read-only
+    set_records(session, records)                   seed records (e.g. loaded from the DB);
+                                                    Redaction ids must be 1..n
     forget_session(session)                         evict records + cached ruleset
 
 
@@ -136,7 +138,7 @@ RULES FOR CALLERS (from AGENTS.md)
   - Fail closed: if apply_rules() returns None, return an error to the user.
   - Never log raw user text or placeholder-to-value mappings. Log redacted
     text or metadata only. The engine's own error logs contain exception
-    messages from re2 / rule config / the loader, not user text; a loader or
+    messages from re / rule config / the loader, not user text; a loader or
     detector that puts user text into exceptions would break this.
   - Do not persist original text or mappings without a decision (see below).
   - Tests and examples use synthetic PII only.
@@ -145,12 +147,13 @@ RULES FOR CALLERS (from AGENTS.md)
 TESTING
 -------
 
-    uv run python scripts/test_privacy_engine.py
+    uv run pytest tests/test_privacy_engine.py
 
 Pure Python, no database. Checks redaction, per-session placeholder
-consistency, restore_text, priority/overlap handling, span offsets, llm_content, NER via a
-fake detector, disabled rules, ruleset cache refresh/override/invalidate,
-eviction, and the return-None failure paths.
+consistency, restore_text, priority/overlap handling, span offsets, llm_content,
+disabled rules, ruleset cache refresh/override/invalidate, eviction, and the
+return-None failure paths. The NER tests (with a fake detector) are written but
+commented out until the NER model is integrated.
 
 
 TO DO LATER (not implemented; marked `TODO(DB)` in the code)

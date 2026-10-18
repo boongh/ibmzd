@@ -8,14 +8,20 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.143.3",
+    "httpx>=0.28.1",
     "loguru>=0.7.3",
     "pydantic>=2.14.1",
     "sqlmodel>=0.0.48",
+    "uvicorn>=0.54.0",
 ]
 
-[project.scripts]
-ibmzd = "ibmzd:main"
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+    "pytest>=9.1.1",
+]
 
-[build-system]
-requires = ["uv_build>=0.12.10,<0.13.0"]
-build-backend = "uv_build"
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

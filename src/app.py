@@ -42,11 +42,13 @@ def create_app(app_conf: AppConfig) -> FastAPI:
     logger.info(f"Database ready at {app_conf.database.path}")
 
     ner_detector = None
-    if app_conf.ner.model_path is not None:
-        from src.ner import LfmPiiDetector
+    if app_conf.ner.enabled:
+        from src.ner import LfmPiiDetector, warn_if_low_memory
 
-        logger.info(f"Loading NER model from {app_conf.ner.model_path}")
-        ner_detector = LfmPiiDetector(app_conf.ner.model_path)
+        ner = app_conf.ner
+        logger.info(f"Loading NER model ({ner.mode}) from {ner.cache_dir}")
+        warn_if_low_memory()
+        ner_detector = LfmPiiDetector(ner.cache_dir.expanduser(), ner.mode, ner.local_files_only)
     else:
         logger.info("NER disabled; sessions whose ruleset has an NER rule will refuse to chat")
 

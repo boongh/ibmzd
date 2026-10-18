@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from types import SimpleNamespace
 
 import httpx
@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from src import llm
-from src.ner import short_label, token_windows
+from src.ner import MAX_TOKENS, LfmPiiDetector, TextTooLongError, short_label
 from src.schemas import LlmModelCreate, RulesetUpdate
 from src.security import hash_password, verify_password
 
@@ -65,13 +65,30 @@ def test_stream_chat_raises_llm_error_on_http_error(monkeypatch):
         list(llm.stream_chat(ENDPOINT, []))
 
 
-def test_token_windows_cover_all_tokens_with_overlap():
-    offsets = [(i, i + 1) for i in range(25)]
-    windows = token_windows(offsets, size=10, overlap=3)
-    assert windows[0][0] == 0 and windows[-1][1] == 25
-    assert all(prev[1] > nxt[0] for prev, nxt in zip(windows, windows[1:]))
-    assert token_windows([], size=10, overlap=3) == []
-
-
 def test_short_label():
     assert short_label("identity.person_name") == "PERSON_NAME"
+
+
+def _fake_detector(spans: list[dict], tokens: int = 10) -> LfmPiiDetector:
+    """LfmPiiDetector with the model parts replaced, so no torch / model is needed"""
+    detector = LfmPiiDetector.__new__(LfmPiiDetector)
+    detector._torch = SimpleNamespace(inference_mode=nullcontext)
+    detector._tokenizer = lambda text, **kwargs: {"input_ids": [0] * tokens}
+    detector._model = None
+    detector._decode = SimpleNamespace(model_spans=lambda text, tok, model: [], hybrid_spans=lambda text, raw: spans)
+    return detector
+
+
+def test_ner_detector_keeps_selected_types_with_short_labels():
+    spans = [
+        {"start": 0, "end": 4, "type": "identity.person_name"},
+        {"start": 5, "end": 20, "type": "contact.email"},
+    ]
+    detector = _fake_detector(spans)
+    assert detector("Jane jane@example.com", ["identity.person_name"]) == [(0, 4, "PERSON_NAME")]
+    assert detector("Jane jane@example.com", []) == []
+
+
+def test_ner_detector_rejects_too_long_texts():
+    with pytest.raises(TextTooLongError):
+        _fake_detector([], tokens=MAX_TOKENS + 1)("long text", ["identity.person_name"])

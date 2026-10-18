@@ -151,9 +151,9 @@ TESTING
 
 Pure Python, no database. Checks redaction, per-session placeholder
 consistency, restore_text, priority/overlap handling, span offsets, llm_content,
-disabled rules, ruleset cache refresh/override/invalidate, eviction, and the
-return-None failure paths. The NER tests (with a fake detector) are written but
-commented out until the NER model is integrated.
+disabled rules, ruleset cache refresh/override/invalidate, eviction, the
+return-None failure paths, and NER rules with a fake detector (the real model
+is src/ner.py).
 
 
 TO DO LATER (not implemented; marked `TODO(DB)` in the code)

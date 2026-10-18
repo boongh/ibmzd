@@ -12,6 +12,9 @@ level="INFO"
 token_ttl_hours=168
 
 [ner]
-# Local dir of LiquidAI/LFM2.5-Encoder-350M-PII-Detector; requires torch + transformers.
-# Leave unset to disable NER (sessions using NER rules then fail closed).
-# model_path="./models/LFM2.5-Encoder-350M-PII-Detector"
+# LiquidAI/LFM2.5-Encoder-350M-PII-Detector (pinned revision, see src/ner.py); needs torch + transformers,
+# and torch-nnpa for mode="hybrid". Disabled: sessions whose ruleset has an NER rule refuse to chat.
+enabled=false
+cache_dir="~/lfm25-pii-linuxone/hf-cache"   # Hugging Face cache that already contains the model
+mode="cpu"                                  # "hybrid": NNPA (IBM z16 / LinuxONE 4) with ShortConv on CPU
+local_files_only=true                       # never download at startup

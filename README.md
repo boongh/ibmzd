@@ -60,10 +60,46 @@ uv run python main.py
 
 Interactive API docs are served at `/docs`.
 
-NER rules need the [LFM2.5-Encoder-350M-PII-Detector](https://huggingface.co/LiquidAI/LFM2.5-Encoder-350M-PII-Detector)
-model: download it to a local directory, install `torch` and `transformers`,
-and set `[ner] model_path` in `config.toml`. Without it, sessions whose ruleset
-contains an NER rule refuse to chat.
+### NER
+
+NER rules use [LFM2.5-Encoder-350M-PII-Detector](https://huggingface.co/LiquidAI/LFM2.5-Encoder-350M-PII-Detector)
+at a pinned revision (`src/ner.py`). `torch` and `transformers` are not project
+dependencies; install them in the environment that runs the backend, put the
+model into a Hugging Face cache, and set `[ner] enabled=true` and `cache_dir` in
+`config.toml`. With `mode="hybrid"` (LinuxONE, needs `torch-nnpa`) the model
+runs on NNPA with its ShortConv blocks on CPU; at startup the hybrid result is
+checked against CPU on a synthetic sample and the server refuses to start if
+they differ. Without NER, sessions whose ruleset contains an NER rule refuse to
+chat.
+
+- Messages longer than 2048 tokens are rejected (422), not truncated.
+- Known model gaps: some names are missed, phone numbers can be cut short, and
+  e-mail addresses directly next to Chinese text can lose their first characters.
+  Combine NER rules with regex rules for fixed formats (e-mail, phone) and give
+  those a lower `priority` number, so they win where both match.
+
+### LinuxONE (Docker)
+
+The `Dockerfile` builds on the LinuxONE Community Cloud JupyterLab image, whose
+`/opt/venv` already has the verified torch 2.11.0+cpu, torch-nnpa 1.5.0,
+transformers 5.19.0 and zDNN setup; uv only adds the backend's dependencies
+(the build fails if it would change the torch / transformers versions).
+
+```sh
+docker build -t gatekeeper:dev .
+mkdir -p ~/gatekeeper/data            # database and Hugging Face cache (with the pinned model)
+cp example.toml ~/gatekeeper/config.toml
+# in config.toml: host="127.0.0.1", database path="/data/storage.db",
+#                 [ner] enabled=true, cache_dir="/data/hf-cache", mode="hybrid"
+docker run -d --name gatekeeper --network host \
+  -v ~/gatekeeper/config.toml:/app/config.toml:ro -v ~/gatekeeper/data:/data gatekeeper:dev
+docker logs -f gatekeeper             # wait for "self-check passed" and "Uvicorn running"
+```
+
+The backend only listens on `127.0.0.1`; reach it through an SSH tunnel
+(`ssh -L 8000:127.0.0.1:8000 <user>@<host>`). With the model loaded it uses
+about 3 GiB of memory, so stop notebook kernels that hold another copy of the
+model first.
 
 ## Run the tests
 
@@ -73,8 +109,7 @@ uv run pytest
 
 Tests live in `tests/` and only use synthetic PII: unit tests (`test_units.py`,
 `test_privacy_engine.py`) and API integration tests (`test_api.py`), where the
-LLM is replaced by a fake. The NER tests are commented out until the NER model
-is integrated. Run them through pytest (e.g. PyCharm's pytest runner), not as
+LLM and the NER model are replaced by fakes. Run them through pytest (e.g. PyCharm's pytest runner), not as
 plain Python scripts.
 
 ## Run the frontend

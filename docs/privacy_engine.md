@@ -39,7 +39,7 @@ DATA STRUCTS (privacy_models.py)
 They mirror the DB tables but hold only what the engine needs. All are
 dataclasses; all except SessionRecords are frozen.
 
-    RegexRuleConfig(pattern, label)          rules.config, type "regex" (google-re2 syntax)
+    RegexRuleConfig(pattern, label)          rules.config, type "regex" (Python re syntax)
     NerRuleConfig(entities)                  rules.config, type "ner" (e.g. ["identity.person_name"])
     Rule(id, name, config)                   rules row
     RulesetEntry(rule, priority=0,           ruleset_rules row with the rule inlined.
@@ -138,7 +138,7 @@ RULES FOR CALLERS (from AGENTS.md)
   - Fail closed: if apply_rules() returns None, return an error to the user.
   - Never log raw user text or placeholder-to-value mappings. Log redacted
     text or metadata only. The engine's own error logs contain exception
-    messages from re2 / rule config / the loader, not user text; a loader or
+    messages from re / rule config / the loader, not user text; a loader or
     detector that puts user text into exceptions would break this.
   - Do not persist original text or mappings without a decision (see below).
   - Tests and examples use synthetic PII only.

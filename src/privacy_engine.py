@@ -3,8 +3,6 @@ import re
 from dataclasses import dataclass
 from typing import Callable
 
-import re2
-
 from src.privacy_models import (
     NerRuleConfig,
     Redaction,
@@ -113,7 +111,7 @@ class PrivacyEngine:
                 continue
             rule, config = entry.rule, entry.rule.config
             if isinstance(config, RegexRuleConfig):
-                for m in re2.finditer(config.pattern, text):
+                for m in re.finditer(config.pattern, text):
                     if m.end() > m.start():
                         found.append(_Match(m.start(), m.end(), config.label, rule.id, entry.priority))
             elif isinstance(config, NerRuleConfig):
@@ -183,7 +181,7 @@ class PrivacyEngine:
                 records.llm_content[message_id] = redacted
             return redacted
         except Exception as e:
-            # Messages come from re2/rule config, not user text; no traceback (locals) is logged.
+            # Messages come from re/rule config, not user text; no traceback (locals) is logged.
             logger.error("apply_rules failed: %s: %s", type(e).__name__, e)
             return None
 

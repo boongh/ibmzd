@@ -11,7 +11,7 @@ from typing import Literal
 
 @dataclass(frozen=True)
 class RegexRuleConfig:
-    """rules.config with type "regex". `pattern` uses google-re2 syntax."""
+    """rules.config with type "regex". `pattern` uses Python `re` syntax."""
 
     pattern: str
     label: str

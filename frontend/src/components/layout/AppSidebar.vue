@@ -4,28 +4,20 @@ import { computed } from 'vue'
 const props = defineProps({
   activePanel: { type: String, required: true },
   sidebarOpen: { type: Boolean, default: false },
-  rules: { type: Array, default: () => [] },
-  conversations: { type: Array, default: () => [] },
-  conversationId: { type: String, required: true },
+  username: { type: String, required: true },
+  counts: { type: Object, required: true }, // { rules, rulesets, models }
+  sessions: { type: Array, default: () => [] },
+  currentSessionId: { type: Number, default: null },
 })
 
-const emit = defineEmits([
-  'navigate',
-  'new-conversation',
-  'refresh-conversations',
-  'select-conversation',
-  'delete-conversation',
-])
+const emit = defineEmits(['navigate', 'new-conversation', 'refresh-sessions', 'select-session', 'delete-session', 'logout'])
 
-const rulesActive = computed(() => ['rules', 'rule-form'].includes(props.activePanel))
-
-function formatTime(value) {
-  if (!value) return 'Recent'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime())
-    ? String(value)
-    : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)
-}
+const section = computed(() => props.activePanel.replace(/-form$/, '')) // rule-form -> rule
+const navItems = [
+  { panel: 'rules', section: 'rule', label: 'Detection rules', icon: 'sliders', count: 'rules' },
+  { panel: 'rulesets', section: 'ruleset', label: 'Rulesets', icon: 'shield-check', count: 'rulesets' },
+  { panel: 'models', section: 'model', label: 'LLM models', icon: 'lock', count: 'models' },
+]
 </script>
 
 <template>
@@ -42,32 +34,37 @@ function formatTime(value) {
         <img class="ui-icon" src="/icons/chat.svg" alt="" aria-hidden="true" />
         <span>AI workspace</span>
       </button>
-      <button class="nav-link" :class="{ selected: rulesActive }" @click="emit('navigate', 'rules')">
-        <img class="ui-icon" src="/icons/sliders.svg" alt="" aria-hidden="true" />
-        <span>Detection rules</span>
-        <span class="nav-count">{{ rules.length || '—' }}</span>
+      <button
+        v-for="item in navItems"
+        :key="item.panel"
+        class="nav-link"
+        :class="{ selected: section === item.section || activePanel === item.panel }"
+        @click="emit('navigate', item.panel)"
+      >
+        <img class="ui-icon" :src="`/icons/${item.icon}.svg`" alt="" aria-hidden="true" />
+        <span>{{ item.label }}</span>
+        <span class="nav-count">{{ counts[item.count] || '—' }}</span>
       </button>
     </div>
 
     <div class="nav-group conversation-group">
       <div class="group-heading">
         <span class="nav-caption">RECENT</span>
-        <button class="plain-icon" aria-label="Refresh conversations" @click="emit('refresh-conversations')">↻</button>
+        <button class="plain-icon" aria-label="Refresh conversations" @click="emit('refresh-sessions')">↻</button>
       </div>
-      <div v-if="conversations.length" class="conversation-list">
-        <div v-for="item in conversations" :key="item.id || item.conversation_id" class="conversation-row">
+      <div v-if="sessions.length" class="conversation-list">
+        <div v-for="session in sessions" :key="session.id" class="conversation-row">
           <button
             class="conversation-link"
-            :class="{ selected: conversationId === (item.id || item.conversation_id) }"
-            @click="emit('select-conversation', item)"
+            :class="{ selected: currentSessionId === session.id }"
+            @click="emit('select-session', session.id)"
           >
-            <span class="conversation-title">{{ item.title || item.name || 'Protected conversation' }}</span>
-            <span class="conversation-date">{{ formatTime(item.updated_at || item.created_at) }}</span>
+            <span class="conversation-title">{{ session.title || 'New conversation' }}</span>
           </button>
           <button
             class="delete-conversation"
-            :aria-label="`Delete ${item.title || 'conversation'}`"
-            @click="emit('delete-conversation', item)"
+            :aria-label="`Delete ${session.title || 'conversation'}`"
+            @click="emit('delete-session', session.id)"
           >×</button>
         </div>
       </div>
@@ -81,7 +78,11 @@ function formatTime(value) {
         </span>
         <div><strong>Your data stays private</strong><p>Original values remain inside this secure boundary.</p></div>
       </div>
-      <div class="user-row"><span class="user-avatar">A</span><span class="user-label">Analyst account</span><span class="user-status">●</span></div>
+      <div class="user-row">
+        <span class="user-avatar">{{ username.charAt(0).toUpperCase() }}</span>
+        <span class="user-label">{{ username }}</span>
+        <button class="sign-out" type="button" @click="emit('logout')">Sign out</button>
+      </div>
     </div>
   </aside>
 </template>

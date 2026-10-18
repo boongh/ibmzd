@@ -5,7 +5,8 @@ from loguru import logger
 from sqlalchemy import delete
 from sqlmodel import col, select
 
-from src.deps import CurrentToken, CurrentUser, DbSession, commit_or_conflict
+from src.db import create_default_ruleset
+from src.deps import CurrentToken, CurrentUser, DbSession, flush_or_conflict
 from src.models import AuthToken, User
 from src.schemas import LoginRequest, TokenOut, UserCreate, UserOut
 from src.security import DUMMY_PASSWORD_HASH, hash_password, hash_token, new_token, verify_password
@@ -17,7 +18,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def register(body: UserCreate, db: DbSession) -> User:
     user = User.model_validate(body, update={"password_hash": hash_password(body.password)})
     db.add(user)
-    commit_or_conflict(db, "Username already exists")
+    flush_or_conflict(db, "Username already exists")  # get user.id before adding the ruleset
+    create_default_ruleset(db, user.id)
+    db.commit()
     logger.info(f"User {user.id} registered")
     return user
 

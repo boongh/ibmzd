@@ -1,27 +1,52 @@
 <script setup>
+import { computed, reactive, ref } from 'vue'
+import { PII_ENTITY_GROUPS } from '../../constants/piiEntities'
+import { keywordsToPattern, normalizeLabel, patternToKeywords } from '../../utils/redaction'
 import FeedbackAlert from '../shared/FeedbackAlert.vue'
 
 const props = defineProps({
-  editingRuleId: { type: [String, Number], default: null },
-  ruleForm: { type: Object, required: true },
-  ruleSample: { type: String, default: '' },
-  testResult: { type: String, default: '' },
-  testError: { type: Boolean, default: false },
+  rule: { type: Object, default: null }, // null: create a new rule
   errorMessage: { type: String, default: '' },
 })
 
-const emit = defineEmits([
-  'back',
-  'cancel',
-  'update:rule-form',
-  'update:rule-sample',
-  'test',
-  'save',
-  'dismiss-error',
-])
+const emit = defineEmits(['back', 'save', 'dismiss-error'])
 
-function updateField(field, value) {
-  emit('update:rule-form', { ...props.ruleForm, [field]: value })
+const LABEL_SUGGESTIONS = ['PERSON', 'EMAIL', 'PHONE', 'ADDRESS', 'ORG', 'ID', 'PROJECT', 'CUSTOM']
+const ALL_ENTITIES = PII_ENTITY_GROUPS.flatMap((group) => group.types.map(([entity]) => entity))
+
+const config = props.rule?.config
+const keywords = config?.type === 'regex' ? patternToKeywords(config.pattern) : null
+// A regex rule that wasn't made from keywords: its pattern is shown but can't be edited here
+const customPattern = config?.type === 'regex' && keywords === null ? config.pattern : null
+
+const form = reactive({
+  name: props.rule?.name || '',
+  type: config?.type === 'ner' ? 'ner' : 'keywords',
+  keywords: (keywords || []).join('\n'),
+  label: config?.type === 'regex' ? config.label : '',
+  // A new NER rule starts with every entity type selected
+  entities: new Set(config?.type === 'ner' ? config.entities : ALL_ENTITIES),
+})
+const localError = ref('')
+
+const keywordList = computed(() => form.keywords.split('\n').map((k) => k.trim()).filter(Boolean))
+
+function toggleEntity(entity) {
+  form.entities.has(entity) ? form.entities.delete(entity) : form.entities.add(entity)
+}
+
+function submit() {
+  localError.value = ''
+  const name = form.name.trim()
+  if (form.type === 'ner') {
+    if (!form.entities.size) return (localError.value = 'Select at least one entity type.')
+    return emit('save', { name, config: { type: 'ner', entities: [...form.entities] } })
+  }
+  const label = normalizeLabel(form.label)
+  if (!label) return (localError.value = 'Enter what the matches are replaced as, e.g. PERSON.')
+  if (customPattern) return emit('save', { name, config: { type: 'regex', pattern: customPattern, label } })
+  if (!keywordList.value.length) return (localError.value = 'Enter at least one keyword.')
+  emit('save', { name, config: { type: 'regex', pattern: keywordsToPattern(keywordList.value), label } })
 }
 </script>
 
@@ -31,81 +56,65 @@ function updateField(field, value) {
     <div class="page-heading-row">
       <div>
         <div class="eyebrow"><span class="eyebrow-dot"></span> PERSONAL PROTECTION</div>
-        <h1>{{ editingRuleId ? 'Edit rule' : 'Create a rule' }}</h1>
-        <p class="heading-description">Define a pattern the gateway should detect and protect.</p>
+        <h1>{{ rule ? 'Edit rule' : 'Create a rule' }}</h1>
+        <p class="heading-description">Choose what the gateway should find and replace before a message is sent.</p>
       </div>
     </div>
-    <FeedbackAlert
-      v-if="errorMessage"
-      heading="Rule was not saved"
-      :message="errorMessage"
-      @dismiss="emit('dismiss-error')"
-    />
+    <FeedbackAlert v-if="errorMessage" heading="Rule was not saved" :message="errorMessage" @dismiss="emit('dismiss-error')" />
+    <FeedbackAlert v-if="localError" :message="localError" @dismiss="localError = ''" />
 
-    <form class="rule-form-card" @submit.prevent="emit('save')">
+    <form class="rule-form-card" @submit.prevent="submit">
       <label class="field-label">
         Rule name
-        <input
-          :value="ruleForm.name"
-          required
-          maxlength="100"
-          placeholder="e.g. Internal ticket IDs"
-          @input="updateField('name', $event.target.value)"
-        />
-      </label>
-      <div class="field-grid">
-        <label class="field-label">
-          Match type
-          <select :value="ruleForm.type" @change="updateField('type', $event.target.value)">
-            <option value="regex">Regular expression</option>
-            <option value="keywords">Keyword list</option>
-          </select>
-        </label>
-        <label class="field-label">
-          Entity type
-          <select :value="ruleForm.entity_type" @change="updateField('entity_type', $event.target.value)">
-            <option value="CUSTOM">Custom</option>
-            <option value="PERSON">Person</option>
-            <option value="ORG">Organisation</option>
-            <option value="EMAIL">Email</option>
-          </select>
-        </label>
-      </div>
-      <label class="field-label">
-        {{ ruleForm.type === 'regex' ? 'Pattern' : 'Keywords (comma separated)' }}
-        <textarea
-          :value="ruleForm.pattern"
-          rows="3"
-          required
-          :placeholder="ruleForm.type === 'regex' ? '\\bTCK-\\d{6}\\b' : 'Project Aurora, Project Nova'"
-          @input="updateField('pattern', $event.target.value)"
-        ></textarea>
-        <small>User patterns are validated by the gateway before use.</small>
-      </label>
-      <label class="field-label">
-        Action
-        <select :value="ruleForm.action" @change="updateField('action', $event.target.value)">
-          <option value="pseudonymise">Pseudonymise — replace with a reversible placeholder</option>
-          <option value="redact">Redact — irreversibly remove the value</option>
-          <option value="block">Block — reject the message</option>
-        </select>
+        <input v-model="form.name" required maxlength="64" placeholder="e.g. Internal project names" />
       </label>
 
-      <div class="rule-test">
-        <div><strong>Test your rule</strong><p>Try a sample value before saving.</p></div>
-        <textarea
-          :value="ruleSample"
-          rows="2"
-          placeholder="Paste sample text to test"
-          @input="emit('update:rule-sample', $event.target.value)"
-        ></textarea>
-        <button class="secondary-button" type="button" :disabled="!ruleSample || !ruleForm.pattern" @click="emit('test')">Test pattern</button>
-        <p v-if="testResult" class="test-result" :class="{ failed: testError }">{{ testResult }}</p>
+      <div v-if="!rule" class="choice-row" role="radiogroup" aria-label="Rule type">
+        <label class="choice" :class="{ selected: form.type === 'keywords' }">
+          <input v-model="form.type" type="radio" value="keywords" />
+          <strong>Keywords</strong><small>Replace exact words or phrases you list.</small>
+        </label>
+        <label class="choice" :class="{ selected: form.type === 'ner' }">
+          <input v-model="form.type" type="radio" value="ner" />
+          <strong>NER</strong><small>Let the model find names, addresses, IDs and more.</small>
+        </label>
+      </div>
+
+      <template v-if="form.type === 'keywords'">
+        <label v-if="customPattern" class="field-label">
+          Pattern
+          <textarea :value="customPattern" rows="2" readonly></textarea>
+          <small>This rule uses a custom regular expression and can't be edited as keywords.</small>
+        </label>
+        <label v-else class="field-label">
+          Keywords to match
+          <textarea v-model="form.keywords" rows="4" placeholder="Project Aurora&#10;Project Nova"></textarea>
+          <small>One per line. Matching ignores upper / lower case.</small>
+        </label>
+        <label class="field-label">
+          Replaced as
+          <input v-model="form.label" list="label-suggestions" maxlength="32" placeholder="e.g. PROJECT" />
+          <datalist id="label-suggestions">
+            <option v-for="label in LABEL_SUGGESTIONS" :key="label" :value="label" />
+          </datalist>
+          <small>Matches become placeholders like [{{ normalizeLabel(form.label) || 'PROJECT' }}_1], so a short type name works best.</small>
+        </label>
+      </template>
+
+      <div v-else class="entity-groups">
+        <span class="field-label">Entity types to replace</span>
+        <fieldset v-for="group in PII_ENTITY_GROUPS" :key="group.name" class="entity-group">
+          <legend>{{ group.name }}</legend>
+          <label v-for="[entity, label] in group.types" :key="entity" class="entity-option">
+            <input type="checkbox" :checked="form.entities.has(entity)" @change="toggleEntity(entity)" />
+            {{ label }}
+          </label>
+        </fieldset>
       </div>
 
       <div class="form-footer">
-        <button class="secondary-button" type="button" @click="emit('cancel')">Cancel</button>
-        <button class="primary-button" type="submit" :disabled="!ruleForm.name || !ruleForm.pattern">Save rule <span>→</span></button>
+        <button class="secondary-button" type="button" @click="emit('back')">Cancel</button>
+        <button class="primary-button" type="submit" :disabled="!form.name.trim()">Save rule <span>→</span></button>
       </div>
     </form>
   </section>

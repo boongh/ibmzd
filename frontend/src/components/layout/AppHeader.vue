@@ -1,5 +1,9 @@
 <script setup>
-defineEmits(['toggle-sidebar', 'go-home'])
+defineProps({
+  username: { type: String, required: true },
+})
+
+defineEmits(['toggle-sidebar', 'go-home', 'logout'])
 </script>
 
 <template>
@@ -18,7 +22,9 @@ defineEmits(['toggle-sidebar', 'go-home'])
       <span class="workspace-label">Secure workspace</span>
     </div>
     <div class="topbar-right">
-      <button class="avatar-button" type="button" aria-label="User account">A</button>
+      <button class="avatar-button" type="button" :title="`Signed in as ${username}. Click to sign out.`" @click="$emit('logout')">
+        {{ username.charAt(0).toUpperCase() }}
+      </button>
     </div>
   </header>
 </template>

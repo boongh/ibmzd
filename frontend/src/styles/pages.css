@@ -1,0 +1,231 @@
+/* Login page */
+.auth-page {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+  background: var(--page);
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.auth-card {
+  width: min(420px, 100%);
+}
+
+.auth-card h1 {
+  margin: 0;
+}
+
+.auth-submit {
+  justify-content: center;
+  width: 100%;
+}
+
+.auth-switch {
+  align-self: center;
+}
+
+/* Chat workspace */
+.session-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.session-title {
+  overflow-wrap: anywhere;
+}
+
+.setup-banner {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--green-light);
+}
+
+.setup-banner p {
+  margin: 4px 0 10px;
+  color: var(--muted);
+}
+
+.setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.message-details {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: var(--green);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.message-details:hover {
+  text-decoration: underline;
+}
+
+.message-error {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: 14px;
+}
+
+/* Rule form */
+.choice-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.choice.selected {
+  border-color: var(--green);
+  background: var(--green-light);
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice small {
+  color: var(--muted);
+}
+
+.entity-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.entity-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.entity-group legend {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.entity-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* Ruleset form */
+.ruleset-entries {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.ruleset-entry {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.ruleset-entry:first-child {
+  border-top: 0;
+}
+
+.ruleset-entry.excluded {
+  color: var(--muted);
+}
+
+.ruleset-entry small {
+  color: var(--muted);
+}
+
+.entry-priority {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.entry-priority input {
+  width: 64px;
+}
+
+/* Spacing / consistency tweaks */
+.auth-card h1 {
+  margin-bottom: 4px;
+}
+
+.auth-card .heading-description {
+  margin: 0 0 12px;
+}
+
+.sign-out {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.sign-out:hover {
+  color: var(--ink);
+}
+
+.ruleset-entry {
+  font-size: 14px;
+}
+
+.entry-priority input {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.entity-option input,
+.choice input,
+.ruleset-entry input[type='checkbox'] {
+  accent-color: var(--green);
+}

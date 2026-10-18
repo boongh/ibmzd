@@ -90,7 +90,6 @@ class RedactionSpan:
 @dataclass
 class SessionRecords:
     """Everything the engine holds in memory for one session."""
-
+    redaction_spans: list[RedactionSpan] = field(default_factory=list)
     redactions: dict[str, Redaction] = field(default_factory=dict)  # keyed by original text
-    spans: list[RedactionSpan] = field(default_factory=list)
     llm_content: dict[int, str] = field(default_factory=dict)  # message_id -> redacted text

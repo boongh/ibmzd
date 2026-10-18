@@ -8,7 +8,6 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "google-re2",
     "loguru>=0.7.3",
     "pydantic>=2.14.1",
     "sqlmodel>=0.0.48",

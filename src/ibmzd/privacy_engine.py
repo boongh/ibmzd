@@ -3,8 +3,6 @@ import re
 from dataclasses import dataclass
 from typing import Callable
 
-import re2
-
 from ibmzd.privacy_models import (
     NerRuleConfig,
     Redaction,
@@ -16,13 +14,18 @@ from ibmzd.privacy_models import (
 
 logger = logging.getLogger(__name__)
 
+## Interface for DB integration
+
 # (text, entity type names) -> [(start, end, label), ...] with offsets into `text`
 NerDetector = Callable[[str, list[str]], list[tuple[int, int, str]]]
-
-# TODO(DB): session id -> Ruleset (built from chat_sessions/rulesets/ruleset_rules/rules rows),
-# or None if the session is unknown. Supplied by the integrator.
+# (session) -> Ruleset | None
 RulesetLoader = Callable[[str], Ruleset | None]
+# (redactions) -> None
+_db_insert_redaction_map = Callable[[list[Redaction]], None]
+# (message_id, redacted text) -> None
+_db_insert_redacted_content = Callable[[int, str], None]
 
+##-------------------------------------
 
 @dataclass(frozen=True)
 class _Match:
@@ -40,9 +43,13 @@ class PrivacyEngine:
         self,
         ruleset_loader: RulesetLoader | None = None,
         ner_detector: NerDetector | None = None,
+        db_insert_redaction_map: _db_insert_redaction_map | None = None,
+        db_insert_redacted_content: _db_insert_redacted_content | None = None,
     ):
         self._ruleset_loader = ruleset_loader
         self._ner_detector = ner_detector
+        self._db_insert_redaction_map = db_insert_redaction_map
+        self._db_insert_redacted_content = db_insert_redacted_content
         self._rulesets: dict[str, Ruleset] = {}  # ruleset cache, per session
         self._records: dict[str, SessionRecords] = {}  # held until the integrator persists/evicts them
 
@@ -108,7 +115,7 @@ class PrivacyEngine:
                 continue
             rule, config = entry.rule, entry.rule.config
             if isinstance(config, RegexRuleConfig):
-                for m in re2.finditer(config.pattern, text):
+                for m in re.finditer(config.pattern, text):
                     if m.end() > m.start():
                         found.append(_Match(m.start(), m.end(), config.label, rule.id, entry.priority))
             elif isinstance(config, NerRuleConfig):
@@ -125,7 +132,7 @@ class PrivacyEngine:
     def _resolve_overlaps(matches: list[_Match]) -> list[_Match]:
         """Lower priority number wins, then longer match, then earlier start."""
         accepted: list[_Match] = []
-        for m in sorted(matches, key=lambda m: (m.priority, -(m.end - m.start), m.start)):
+        for m in sorted(matches, key=lambda m: (-(m.end - m.start), m.start)):
             if all(m.end <= a.start or m.start >= a.end for a in accepted):
                 accepted.append(m)
         return sorted(accepted, key=lambda m: m.start)
@@ -145,10 +152,13 @@ class PrivacyEngine:
             known = records.redactions if records else {}
             new: dict[str, Redaction] = {}
             counts: dict[str, int] = {}
+
+            ##Count unique redaction labels already known in the session, to continue numbering new redactions correctly
             for r in known.values():
                 counts[r.label] = counts.get(r.label, 0) + 1
             next_id = len(known) + 1
 
+            ##Build the redacted text, the new redactions, and the spans for this message
             parts: list[str] = []
             spans: list[RedactionSpan] = []
             pos = 0
@@ -174,8 +184,8 @@ class PrivacyEngine:
                 records = self._records.setdefault(session, SessionRecords())
             records.redactions.update(new)
             if message_id is not None:
-                records.spans = [s for s in records.spans if s.message_id != message_id] + spans
-                records.llm_content[message_id] = redacted
+                self._db_insert_redaction_map(new.values())
+                self._db_insert_redacted_content(message_id, redacted)
             return redacted
         except Exception as e:
             # Messages come from re2/rule config, not user text; no traceback (locals) is logged.

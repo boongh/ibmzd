@@ -4,10 +4,13 @@
 .pytest_cache
 .ruff_cache
 **/__pycache__
-frontend
+frontend/node_modules
+frontend/dist
 tests
 docs
 config.toml
 *.db
 *.db-wal
 *.db-shm
+data
+.env

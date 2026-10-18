@@ -17,6 +17,11 @@ values are restored in the reply for the user.
 .
 ├── main.py                    # backend entry point
 ├── example.toml               # backend config template, copy to config.toml
+├── Dockerfile                 # backend image (LinuxONE)
+├── docker-compose.yml         # backend + web (Caddy) for the demo deployment
+├── deploy/
+│   ├── Caddyfile              # serves the frontend, proxies /api to the backend
+│   └── web.Dockerfile         # frontend image
 ├── src/
 │   ├── app.py                 # FastAPI app
 │   ├── auth.py                # routers: /auth
@@ -78,28 +83,36 @@ chat.
   Combine NER rules with regex rules for fixed formats (e-mail, phone) and give
   those a lower `priority` number, so they win where both match.
 
-### LinuxONE (Docker)
+### LinuxONE (Docker Compose)
 
-The `Dockerfile` builds on the LinuxONE Community Cloud JupyterLab image, whose
-`/opt/venv` already has the verified torch 2.11.0+cpu, torch-nnpa 1.5.0,
-transformers 5.19.0 and zDNN setup; uv only adds the backend's dependencies
-(the build fails if it would change the torch / transformers versions).
+`docker-compose.yml` runs two services: `web` (Caddy, port 80) serves the built
+frontend and proxies `/api/*` to `backend`, which is only reachable inside the
+compose network.
+
+- `Dockerfile` (backend) builds on the LinuxONE Community Cloud JupyterLab image,
+  whose `/opt/venv` already has the verified torch 2.11.0+cpu, torch-nnpa 1.5.0,
+  transformers 5.19.0 and zDNN setup; uv only adds the backend's dependencies
+  (the build fails if it would change the torch / transformers versions).
+- `deploy/web.Dockerfile` builds the frontend with Red Hat's UBI Node.js 22 image
+  (the official `node:22` images have no s390x build) and serves it with Caddy
+  (`deploy/Caddyfile`).
 
 ```sh
-docker build -t gatekeeper:dev .
 mkdir -p ~/gatekeeper/data            # database and Hugging Face cache (with the pinned model)
 cp example.toml ~/gatekeeper/config.toml
-# in config.toml: host="127.0.0.1", database path="/data/storage.db",
+# in config.toml: host="0.0.0.0", port=8000, database path="/data/storage.db",
 #                 [ner] enabled=true, cache_dir="/data/hf-cache", mode="hybrid"
-docker run -d --name gatekeeper --network host \
-  -v ~/gatekeeper/config.toml:/app/config.toml:ro -v ~/gatekeeper/data:/data gatekeeper:dev
-docker logs -f gatekeeper             # wait for "self-check passed" and "Uvicorn running"
+export GATEKEEPER_CONFIG=~/gatekeeper/config.toml GATEKEEPER_DATA=~/gatekeeper/data
+docker compose up -d --build          # web starts once the backend is healthy (model loaded)
+docker compose logs -f backend        # "self-check passed", "Uvicorn running"
 ```
 
-The backend only listens on `127.0.0.1`; reach it through an SSH tunnel
-(`ssh -L 8000:127.0.0.1:8000 <user>@<host>`). With the model loaded it uses
-about 3 GiB of memory, so stop notebook kernels that hold another copy of the
-model first.
+This is meant for a temporary demo: port 80 is plain HTTP, so passwords and chat
+contents travel unencrypted, and login has no rate limit. Stop it with
+`docker compose down` when the demo is over. With the model loaded the backend
+uses about 3 GiB of memory, so stop notebook kernels that hold another copy of
+the model first. LLM servers running on the host itself are reachable from the
+backend as `http://host.docker.internal:<port>`.
 
 ## Run the tests
 

@@ -1,0 +1,29 @@
+# Temporary demo deployment on LinuxONE (s390x): Caddy serves the frontend on port 80 and
+# proxies /api to the backend, which is only reachable inside the compose network.
+# config.toml needs [server] host="0.0.0.0" and port=8000 (see README).
+services:
+  backend:
+    build: .
+    image: gatekeeper-backend:dev
+    volumes:
+      - ${GATEKEEPER_CONFIG:-./config.toml}:/app/config.toml:ro
+      - ${GATEKEEPER_DATA:-./data}:/data # database and Hugging Face cache
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # for LLM servers running on the host
+    healthcheck:
+      test: ["CMD", "/opt/venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs')"]
+      interval: 10s
+      start_period: 120s # loading the NER model takes a while
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    image: gatekeeper-web:dev
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

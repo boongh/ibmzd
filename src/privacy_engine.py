@@ -14,13 +14,14 @@ from src.privacy_models import (
 
 logger = logging.getLogger(__name__)
 
+## Interface for DB integration
+
 # (text, entity type names) -> [(start, end, label), ...] with offsets into `text`
 NerDetector = Callable[[str, list[str]], list[tuple[int, int, str]]]
-
-# TODO(DB): session id -> Ruleset (built from chat_sessions/rulesets/ruleset_rules/rules rows),
-# or None if the session is unknown. Supplied by the integrator.
+# (session) -> Ruleset | None
 RulesetLoader = Callable[[str], Ruleset | None]
 
+##-------------------------------------
 
 @dataclass(frozen=True)
 class _Match:
@@ -148,10 +149,13 @@ class PrivacyEngine:
             known = records.redactions if records else {}
             new: dict[str, Redaction] = {}
             counts: dict[str, int] = {}
+
+            ##Count unique redaction labels already known in the session, to continue numbering new redactions correctly
             for r in known.values():
                 counts[r.label] = counts.get(r.label, 0) + 1
             next_id = len(known) + 1
 
+            ##Build the redacted text, the new redactions, and the spans for this message
             parts: list[str] = []
             spans: list[RedactionSpan] = []
             pos = 0

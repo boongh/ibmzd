@@ -47,6 +47,13 @@ def test_redacts_and_records_spans(engine):
 def test_overlap_lower_priority_number_wins(engine):
     # PHONE (priority 1) beats DIGITS (priority 2) on the same digits
     assert engine.apply_rules("ring +1 555-123-4567", "s1") == "ring [PHONE_1]"
+    # priority wins even over a longer match
+    short_first = Ruleset(4, "short-first", [
+        RulesetEntry(Rule(6, "code", RegexRuleConfig(r"\d{6}", "CODE")), priority=0),
+        RulesetEntry(Rule(7, "long", RegexRuleConfig(r"\d{6}-\d{4}", "LONG")), priority=1),
+    ])
+    engine.set_ruleset("s3", short_first)
+    assert engine.apply_rules("id 123456-7890", "s3") == "id [CODE_1]-7890"
 
 
 def test_same_value_keeps_its_placeholder(engine):

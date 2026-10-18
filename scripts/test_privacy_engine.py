@@ -1,9 +1,13 @@
 """Synthetic-data check for PrivacyEngine. Run: uv run python scripts/test_privacy_engine.py"""
 
 import logging
+import sys
+from pathlib import Path
 
-from ibmzd.privacy_engine import PrivacyEngine
-from ibmzd.privacy_models import NerRuleConfig, RegexRuleConfig, Rule, Ruleset, RulesetEntry
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # repo root, so that `src` is importable
+
+from src.privacy_engine import PrivacyEngine
+from src.privacy_models import NerRuleConfig, RegexRuleConfig, Rule, Ruleset, RulesetEntry
 
 EMAIL = r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
 PHONE = r"\+?\d{1,3}[-. ]\d{3}[-. ]\d{3}[-. ]\d{4}"

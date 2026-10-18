@@ -7,3 +7,11 @@ path="./storage.db"
 
 [log]
 level="INFO"
+
+[auth]
+token_ttl_hours=168
+
+[ner]
+# Local dir of LiquidAI/LFM2.5-Encoder-350M-PII-Detector; requires torch + transformers.
+# Leave unset to disable NER (sessions using NER rules then fail closed).
+# model_path="./models/LFM2.5-Encoder-350M-PII-Detector"

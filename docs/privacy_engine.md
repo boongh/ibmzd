@@ -1,8 +1,8 @@
 PRIVACY ENGINE - INTEGRATION GUIDE
 ==================================
 
-Modules: src/ibmzd/privacy_engine.py   (PrivacyEngine)
-         src/ibmzd/privacy_models.py   (plain-Python data structs)
+Modules: src/privacy_engine.py         (PrivacyEngine)
+         src/privacy_models.py         (plain-Python data structs)
 
 The engine does all redaction itself (and restoration, if the stretch goal is
 built). It does not talk to the LLM, the frontend or the database. It is
@@ -17,8 +17,8 @@ to do three things:
 QUICK START
 -----------
 
-    from ibmzd.privacy_engine import PrivacyEngine
-    from ibmzd.privacy_models import Rule, RegexRuleConfig, Ruleset, RulesetEntry
+    from src.privacy_engine import PrivacyEngine
+    from src.privacy_models import Rule, RegexRuleConfig, Ruleset, RulesetEntry
 
     ruleset = Ruleset(1, "default", [
         RulesetEntry(Rule(1, "email", RegexRuleConfig(r"[\w.+-]+@[\w-]+\.\w+", "EMAIL")), priority=0),
@@ -73,7 +73,7 @@ PrivacyEngine(ruleset_loader=None, ner_detector=None)
 apply_rules(text: str, session: str, *, message_id: int | None = None) -> str | None
     Redacts `text` with the session's ruleset and returns the redacted text.
     Returns None (never raises) if the session has no ruleset or anything
-    fails. The error is logged on the `ibmzd.privacy_engine` logger as
+    fails. The error is logged on the `src.privacy_engine` logger as
     "<ExceptionType>: <message>", no traceback. On failure the engine's state
     is unchanged. Callers MUST treat None as an error and not forward the
     original text.
@@ -105,6 +105,8 @@ Ruleset cache (one cached Ruleset per session):
 
 Held records:
     get_records(session) -> SessionRecords | None   the LIVE object, treat as read-only
+    set_records(session, records)                   seed records (e.g. loaded from the DB);
+                                                    Redaction ids must be 1..n
     forget_session(session)                         evict records + cached ruleset
 
 

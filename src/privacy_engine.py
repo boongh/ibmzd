@@ -5,7 +5,7 @@ from typing import Callable
 
 import re2
 
-from ibmzd.privacy_models import (
+from src.privacy_models import (
     NerRuleConfig,
     Redaction,
     RedactionSpan,
@@ -89,6 +89,11 @@ class PrivacyEngine:
     def get_records(self, session: str) -> SessionRecords | None:
         """Redactions, spans and llm_content held for a session (the live object, treat as read-only)."""
         return self._records.get(session)
+
+    def set_records(self, session: str, records: SessionRecords) -> None:
+        """Seed (or replace) a session's records, e.g. with redactions loaded from the DB, so that
+        placeholder numbering and restore_text continue from them. Redaction ids must be 1..n."""
+        self._records[session] = records
 
     def forget_session(self, session: str) -> None:
         """Evict a session's records and cached ruleset from memory."""

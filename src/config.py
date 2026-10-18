@@ -14,10 +14,20 @@ class DatabaseConfig(BaseModel):
 class LogConfig(BaseModel):
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
+class AuthConfig(BaseModel):
+    token_ttl_hours: int = Field(default=24 * 7, ge=1)
+
+class NerConfig(BaseModel):
+    # Local dir of LiquidAI/LFM2.5-Encoder-350M-PII-Detector (needs torch + transformers).
+    # Not set -> NER disabled, and sessions whose ruleset has an NER rule fail closed
+    model_path: Path | None = None
+
 class AppConfig(BaseModel):
     server: ServerConfig
     database: DatabaseConfig
     log: LogConfig
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    ner: NerConfig = Field(default_factory=NerConfig)
 
     @classmethod
     def load_config(cls, filepath: str) -> "AppConfig":

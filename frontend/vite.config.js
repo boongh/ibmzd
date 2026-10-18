@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     publicDir: 'assets',
-    plugins: [vue()],
+    plugins: [vue(), basicSsl()],
     server: {
       proxy: {
         '/api': {

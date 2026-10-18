@@ -6,6 +6,9 @@ redactions are loaded into the engine, and the engine's records are dropped afte
 
 import threading
 
+from collections import Counter
+
+from loguru import logger
 from sqlmodel import Session, col, select
 
 from src import privacy_models as pm
@@ -54,6 +57,7 @@ class PrivacyService:
         with self._lock:
             try:
                 db_ids = self._seed(db, key, chat.id)
+                seeded = len(db_ids)
                 self._engine.set_ruleset(key, ruleset)
 
                 # Redact before writing anything: a flush takes SQLite's write lock, and NER inference
@@ -61,6 +65,7 @@ class PrivacyService:
                 # message_id is only needed for the engine to record spans; the real id is set below.
                 redacted = self._engine.apply_rules(text, key, message_id=0)
                 if redacted is None:
+                    logger.warning(f"Session {chat.id}: redaction failed, message rejected (fail closed)")
                     return None
 
                 message = Message(session_id=chat.id, role="user", content=text, llm_content=redacted)
@@ -80,6 +85,11 @@ class PrivacyService:
                         rule_id=s.rule_id, start_pos=s.start_pos, end_pos=s.end_pos,
                     ))
                 db.commit()
+                # Metadata only: counts and entity types (AGENTS.md)
+                labels = {r.id: r.label for r in records.redactions.values()}
+                counts = dict(Counter(labels[s.redaction_id] for s in records.spans))
+                new = len(db_ids) - seeded
+                logger.info(f"Session {chat.id}: message {message.id} redacted, {len(records.spans)} replacement(s) {counts}, {new} new placeholder(s)")
                 return message
             finally:
                 self._engine.forget_session(key)

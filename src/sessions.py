@@ -1,4 +1,5 @@
 import json
+import time
 
 from collections.abc import Iterator
 from typing import Any
@@ -38,6 +39,7 @@ def create_session(body: SessionCreate, user: CurrentUser, db: DbSession) -> Cha
     chat = ChatSession.model_validate(body, update={"user_id": user.id})
     db.add(chat)
     db.commit()
+    logger.info(f"User {user.id} created session {chat.id} (ruleset {chat.ruleset_id}, LLM model {chat.llm_model_id})")
     return chat
 
 
@@ -59,6 +61,7 @@ def update_session(session_id: int, body: SessionUpdate, user: CurrentUser, db: 
         chat.title = body.title
     db.add(chat)
     db.commit()
+    logger.info(f"User {user.id} updated session {chat.id} ({', '.join(sorted(fields))})")
     return chat
 
 
@@ -67,6 +70,7 @@ def delete_session(session_id: int, user: CurrentUser, db: DbSession) -> None:
     """Also deletes its messages and replacement table"""
     db.delete(get_owned_session(db, user, session_id))
     db.commit()
+    logger.info(f"User {user.id} deleted session {session_id}")
 
 
 @router.get("/{session_id}/messages", response_model=list[MessageOut])
@@ -140,11 +144,16 @@ def _stream_reply(
 ) -> Iterator[str]:
     yield _sse({"type": "user_message", "id": message.id, "llm_content": message.llm_content})
 
+    logger.info(f"Session {session_id}: sending {len(llm_messages)} message(s) to LLM ({endpoint.model})")
+    started = time.monotonic()
     parts: list[str] = []
     try:
         for delta in stream_chat(endpoint, llm_messages):
             parts.append(delta)
             yield _sse({"type": "delta", "content": delta})
+    except GeneratorExit:
+        logger.info(f"Session {session_id}: client disconnected, reply not saved")
+        raise
     except LlmError as e:
         logger.warning(f"Session {session_id}: {e}")  # LlmError never contains message text
         yield _sse({"type": "error", "detail": str(e)})
@@ -168,4 +177,5 @@ def _stream_reply(
         logger.error(f"Session {session_id}: failed to save the reply: {type(e).__name__}")
         yield _sse({"type": "error", "detail": "Failed to save the reply"})
         return
+    logger.info(f"Session {session_id}: reply {reply.id} saved ({len(raw)} chars in {time.monotonic() - started:.1f}s)")
     yield _sse({"type": "done", "message_id": reply.id, "content": restored})

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
+from loguru import logger
 from sqlalchemy import delete
 from sqlmodel import col, select
 
@@ -59,6 +60,7 @@ def create_ruleset(body: RulesetCreate, user: CurrentUser, db: DbSession) -> Rul
     flush_or_conflict(db, _NAME_TAKEN)
     _replace_entries(db, user, ruleset, body.entries)
     db.commit()
+    logger.info(f"User {user.id} created ruleset {ruleset.id} with {len(body.entries)} rule(s)")
     return _out(db, ruleset)
 
 
@@ -79,6 +81,7 @@ def update_ruleset(ruleset_id: int, body: RulesetUpdate, user: CurrentUser, db: 
         _replace_entries(db, user, ruleset, body.entries)
     db.add(ruleset)
     commit_or_conflict(db, _NAME_TAKEN)
+    logger.info(f"User {user.id} updated ruleset {ruleset.id} ({', '.join(sorted(fields))})")
     return _out(db, ruleset)
 
 
@@ -87,3 +90,4 @@ def delete_ruleset(ruleset_id: int, user: CurrentUser, db: DbSession) -> None:
     """Sessions bound to this ruleset are unbound (and refuse to chat until a new one is bound)"""
     db.delete(get_owned_ruleset(db, user, ruleset_id))
     db.commit()
+    logger.info(f"User {user.id} deleted ruleset {ruleset_id}")

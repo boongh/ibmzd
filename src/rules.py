@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
+from loguru import logger
 from sqlmodel import select
 
 from src.deps import CurrentUser, DbSession, commit_or_conflict, get_visible_rule, visible_rules
@@ -28,6 +29,7 @@ def create_rule(body: RuleCreate, user: CurrentUser, db: DbSession) -> Rule:
     rule = Rule.model_validate(body, update={"owner_id": user.id})
     db.add(rule)
     commit_or_conflict(db, _NAME_TAKEN)
+    logger.info(f"User {user.id} created {rule.config.type} rule {rule.id}")
     return rule
 
 
@@ -45,6 +47,7 @@ def update_rule(rule_id: int, body: RuleUpdate, user: CurrentUser, db: DbSession
         rule.config = body.config
     db.add(rule)
     commit_or_conflict(db, _NAME_TAKEN)
+    logger.info(f"User {user.id} updated {rule.config.type} rule {rule.id} ({', '.join(sorted(body.model_fields_set))})")
     return rule
 
 
@@ -53,3 +56,4 @@ def delete_rule(rule_id: int, user: CurrentUser, db: DbSession) -> None:
     """Also removes the rule from all rulesets"""
     db.delete(_get_own_rule(db, user, rule_id))
     db.commit()
+    logger.info(f"User {user.id} deleted rule {rule_id}")

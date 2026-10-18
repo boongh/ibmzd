@@ -1,4 +1,5 @@
 from fastapi import APIRouter, status
+from loguru import logger
 from sqlmodel import select
 
 from src.deps import CurrentUser, DbSession, commit_or_conflict, get_owned_llm_model
@@ -27,6 +28,7 @@ def create_llm_model(body: LlmModelCreate, user: CurrentUser, db: DbSession) -> 
     model = LlmModel.model_validate(body, update={"owner_id": user.id})
     db.add(model)
     commit_or_conflict(db, _NAME_TAKEN)
+    logger.info(f"User {user.id} added LLM model {model.id}")
     return _out(model)
 
 
@@ -41,6 +43,7 @@ def update_llm_model(model_id: int, body: LlmModelUpdate, user: CurrentUser, db:
     model.sqlmodel_update(body.model_dump(exclude_unset=True))
     db.add(model)
     commit_or_conflict(db, _NAME_TAKEN)
+    logger.info(f"User {user.id} updated LLM model {model.id} ({', '.join(sorted(body.model_fields_set))})")
     return _out(model)
 
 
@@ -48,3 +51,4 @@ def update_llm_model(model_id: int, body: LlmModelUpdate, user: CurrentUser, db:
 def delete_llm_model(model_id: int, user: CurrentUser, db: DbSession) -> None:
     db.delete(get_owned_llm_model(db, user, model_id))
     db.commit()
+    logger.info(f"User {user.id} deleted LLM model {model_id}")

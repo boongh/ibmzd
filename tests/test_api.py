@@ -1,10 +1,13 @@
 """API integration tests; the LLM is replaced by the fake_llm fixture. All PII here is synthetic."""
 
+import logging
+
 import pytest
 
 from fastapi.testclient import TestClient
+from loguru import logger
 
-from src.app import create_app
+from src.app import _InterceptHandler, create_app
 from src.llm import LlmError
 
 EMAIL, PHONE = "zhang.san@example.com", "13812345678"
@@ -106,3 +109,30 @@ def test_llm_error_becomes_error_event(client, login, new_session, send, fake_ll
     assert events[-1] == {"type": "error", "detail": "LLM API returned HTTP 500"}
     roles = [m["role"] for m in client.get(f"/sessions/{session}/messages", headers=headers).json()]
     assert roles == ["user"]
+
+
+@pytest.fixture
+def captured_logs():
+    """loguru output, including stdlib logging of src.* (e.g. the privacy engine)"""
+    lines: list[str] = []
+    sink = logger.add(lines.append, level="DEBUG", format="{level} {message}", diagnose=False)
+    handler = _InterceptHandler()
+    logging.getLogger("src").addHandler(handler)
+    yield lines
+    logging.getLogger("src").removeHandler(handler)
+    logger.remove(sink)
+
+
+def test_logs_have_metadata_but_no_pii(client, login, new_session, send, fake_llm, captured_logs):
+    headers = login()
+    send(headers, new_session(headers, EMAIL_RULE, PHONE_RULE), f"邮箱{EMAIL}，电话{PHONE}")
+    broken = new_session(headers, {"type": "regex", "pattern": "(", "label": "BROKEN"})
+    client.post(f"/sessions/{broken}/messages", json={"content": f"Mail {EMAIL}"}, headers=headers)
+    client.post("/auth/login", json={"username": "alice", "password": "wrong-password"})
+
+    logs = "\n".join(captured_logs)
+    assert "redacted, 2 replacement(s) {'EMAIL': 1, 'PHONE': 1}" in logs
+    assert "redaction failed, message rejected" in logs and "apply_rules failed" in logs
+    assert "Login failed" in logs
+    for secret in (EMAIL, PHONE, "邮箱", "alice", "password-123", "wrong-password"):
+        assert secret not in logs

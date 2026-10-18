@@ -1,0 +1,14 @@
+# Serves the built frontend and proxies /api to the backend, like the Vite dev server does
+:80 {
+	handle_path /api/* {
+		reverse_proxy backend:8000 {
+			flush_interval -1 # stream SSE chunks right away
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

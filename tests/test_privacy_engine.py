@@ -3,7 +3,7 @@
 import pytest
 
 from src.privacy_engine import PrivacyEngine
-from src.privacy_models import RegexRuleConfig, Rule, Ruleset, RulesetEntry
+from src.privacy_models import NerRuleConfig, RegexRuleConfig, Rule, Ruleset, RulesetEntry
 
 EMAIL = r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
 PHONE = r"\+?\d{1,3}[-. ]\d{3}[-. ]\d{3}[-. ]\d{4}"
@@ -126,37 +126,33 @@ def test_forget_session(engine):
     assert engine.get_records("s1") is None
 
 
-# ---- NER ----
-# Disabled until the NER model is integrated (src/ner.py). Uncomment to run with a fake detector.
-# (A ruleset with an NER rule but no detector failing closed is also covered by tests/test_api.py.)
-#
-# from src.privacy_models import NerRuleConfig
-#
-# NAMES = Rule(4, "names", NerRuleConfig(["identity.person_name"]))
-# WITH_NAMES = Ruleset(2, "with-names", [*REGEX.entries, RulesetEntry(NAMES, priority=3)])
-#
-#
-# def fake_ner(text, entities):
-#     out = []
-#     for name in ("Alice Example", "Bob Sample"):
-#         i = text.find(name)
-#         if i >= 0 and "identity.person_name" in entities:
-#             out.append((i, i + len(name), "PERSON"))
-#     return out
-#
-#
-# @pytest.fixture
-# def ner_engine():
-#     return PrivacyEngine(ruleset_loader={"s1": WITH_NAMES}.get, ner_detector=fake_ner)
-#
-#
-# def test_ner_rule_uses_the_detector(ner_engine):
-#     assert ner_engine.apply_rules("ring +1 555-123-4567 and Alice Example", "s1") == "ring [PHONE_1] and [PERSON_1]"
-#     assert ner_engine.apply_rules("Alice Example, Bob Sample", "s1") == "[PERSON_1], [PERSON_2]"
-#     assert ner_engine.restore_text("Hi [PERSON_1], see [PHONE_1]", "s1") == "Hi Alice Example, see +1 555-123-4567"
-#
-#
-# def test_ner_rule_without_detector_fails_closed():
-#     engine = PrivacyEngine(ruleset_loader={"s1": WITH_NAMES}.get)
-#     assert engine.apply_rules("Alice Example a@b.co", "s1", message_id=1) is None
-#     assert engine.get_records("s1") is None
+# ---- NER (with a fake detector) ----
+
+NAMES = Rule(4, "names", NerRuleConfig(["identity.person_name"]))
+WITH_NAMES = Ruleset(2, "with-names", [*REGEX.entries, RulesetEntry(NAMES, priority=3)])
+
+
+def fake_ner(text, entities):
+    out = []
+    for name in ("Alice Example", "Bob Sample"):
+        i = text.find(name)
+        if i >= 0 and "identity.person_name" in entities:
+            out.append((i, i + len(name), "PERSON"))
+    return out
+
+
+@pytest.fixture
+def ner_engine():
+    return PrivacyEngine(ruleset_loader={"s1": WITH_NAMES}.get, ner_detector=fake_ner)
+
+
+def test_ner_rule_uses_the_detector(ner_engine):
+    assert ner_engine.apply_rules("ring +1 555-123-4567 and Alice Example", "s1") == "ring [PHONE_1] and [PERSON_1]"
+    assert ner_engine.apply_rules("Alice Example, Bob Sample", "s1") == "[PERSON_1], [PERSON_2]"
+    assert ner_engine.restore_text("Hi [PERSON_1], see [PHONE_1]", "s1") == "Hi Alice Example, see +1 555-123-4567"
+
+
+def test_ner_rule_without_detector_fails_closed():
+    engine = PrivacyEngine(ruleset_loader={"s1": WITH_NAMES}.get)
+    assert engine.apply_rules("Alice Example a@b.co", "s1", message_id=1) is None
+    assert engine.get_records("s1") is None

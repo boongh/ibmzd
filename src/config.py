@@ -18,9 +18,12 @@ class AuthConfig(BaseModel):
     token_ttl_hours: int = Field(default=24 * 7, ge=1)
 
 class NerConfig(BaseModel):
-    # Local dir of LiquidAI/LFM2.5-Encoder-350M-PII-Detector (needs torch + transformers).
-    # Not set -> NER disabled, and sessions whose ruleset has an NER rule fail closed
-    model_path: Path | None = None
+    # LiquidAI/LFM2.5-Encoder-350M-PII-Detector, needs torch + transformers (+ torch-nnpa for "hybrid").
+    # Disabled -> sessions whose ruleset has an NER rule fail closed
+    enabled: bool = False
+    cache_dir: Path = Path("~/lfm25-pii-linuxone/hf-cache")  # Hugging Face cache with the pinned revision
+    mode: Literal["cpu", "hybrid"] = "cpu"  # hybrid: NNPA (IBM z16 / LinuxONE 4) with ShortConv on CPU
+    local_files_only: bool = True  # never download at startup
 
 class AppConfig(BaseModel):
     server: ServerConfig

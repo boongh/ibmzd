@@ -1,0 +1,16 @@
+.git
+.idea
+.venv
+.pytest_cache
+.ruff_cache
+**/__pycache__
+frontend/node_modules
+frontend/dist
+tests
+docs
+config.toml
+*.db
+*.db-wal
+*.db-shm
+data
+.env
